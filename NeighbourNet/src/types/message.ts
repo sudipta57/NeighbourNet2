@@ -14,6 +14,30 @@ export interface Message {
   created_at: string;
   last_hop_at: string;
   synced: boolean;
+  destination_id?: string;
+  chat_thread_id?: string;
+  message_type: 'sos' | 'chat' | 'location_beacon';
+  sender_name?: string;
+}
+
+export interface Friend {
+  friend_code: string;
+  device_uuid: string;
+  display_name: string;
+  last_seen_at: number | null;
+  hop_distance: number | null;
+  added_at: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  thread_id: string;
+  friend_device_uuid: string;
+  body: string;
+  sender_id: string;
+  is_outgoing: boolean;
+  created_at: number;
+  delivered: boolean;
 }
 
 export const SOS_TEMPLATES = [

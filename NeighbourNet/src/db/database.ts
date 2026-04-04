@@ -1,6 +1,6 @@
 import 'react-native-get-random-values';
 import * as SQLite from 'expo-sqlite';
-import { Message, PriorityTier } from '../types/message';
+import { Message, PriorityTier, Friend, ChatMessage } from '../types/message';
 import { MAX_QUEUE_SIZE } from '../constants/priorities';
 import { getItemAsync, setItemAsync } from 'expo-secure-store';
 import { v4 as uuidv4 } from 'uuid';
@@ -29,6 +29,32 @@ export function initDatabase(): void {
       message_id TEXT PRIMARY KEY,
       seen_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS friends (
+      friend_code TEXT PRIMARY KEY,
+      device_uuid TEXT NOT NULL UNIQUE,
+      display_name TEXT NOT NULL DEFAULT '',
+      last_seen_at INTEGER,
+      hop_distance INTEGER,
+      added_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id TEXT PRIMARY KEY,
+      thread_id TEXT NOT NULL,
+      friend_device_uuid TEXT NOT NULL,
+      body TEXT NOT NULL,
+      sender_id TEXT NOT NULL,
+      is_outgoing INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      delivered INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_chat_thread
+      ON chat_messages(thread_id, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_chat_friend
+      ON chat_messages(friend_device_uuid, created_at DESC);
   `);
 }
 
@@ -115,7 +141,8 @@ export function getUnsyncedMessages(): Message[] {
 
   return results.map((row) => ({
     ...row,
-    synced: row.synced === 1, // Map the synced column: 0 = false, 1 = true
+    synced: row.synced === 1,
+    message_type: 'sos' as const,
   }));
 }
 
@@ -170,7 +197,8 @@ export function getAllMessages(): Message[] {
 
   return results.map((row) => ({
     ...row,
-    synced: row.synced === 1, // Map the synced column: 0 = false, 1 = true
+    synced: row.synced === 1,
+    message_type: 'sos' as const,
   }));
 }
 
@@ -198,6 +226,137 @@ export async function getDeviceId(): Promise<string> {
     console.error('Error managing device UUID:', error);
     throw error;
   }
+}
+
+// --- Friends ---
+
+export function saveFriend(friend: Friend): void {
+  db.runSync(
+    `INSERT OR REPLACE INTO friends
+      (friend_code, device_uuid, display_name, last_seen_at, hop_distance, added_at)
+      VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      friend.friend_code,
+      friend.device_uuid,
+      friend.display_name,
+      friend.last_seen_at ?? null,
+      friend.hop_distance ?? null,
+      friend.added_at,
+    ]
+  );
+}
+
+export function getFriends(): Friend[] {
+  return db.getAllSync<Friend>(
+    'SELECT * FROM friends ORDER BY last_seen_at DESC'
+  );
+}
+
+export function getFriendByCode(code: string): Friend | null {
+  return db.getFirstSync<Friend>(
+    'SELECT * FROM friends WHERE friend_code = ?',
+    [code]
+  ) ?? null;
+}
+
+export function getFriendByUUID(uuid: string): Friend | null {
+  return db.getFirstSync<Friend>(
+    'SELECT * FROM friends WHERE device_uuid = ?',
+    [uuid]
+  ) ?? null;
+}
+
+export function updateFriendLastSeen(
+  device_uuid: string,
+  last_seen_at: number,
+  hop_distance: number
+): void {
+  db.runSync(
+    'UPDATE friends SET last_seen_at = ?, hop_distance = ? WHERE device_uuid = ?',
+    [last_seen_at, hop_distance, device_uuid]
+  );
+}
+
+// --- Chat Messages ---
+
+export function saveChatMessage(msg: ChatMessage): void {
+  db.runSync(
+    `INSERT OR IGNORE INTO chat_messages
+      (id, thread_id, friend_device_uuid, body, sender_id, is_outgoing, created_at, delivered)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      msg.id,
+      msg.thread_id,
+      msg.friend_device_uuid,
+      msg.body,
+      msg.sender_id,
+      msg.is_outgoing ? 1 : 0,
+      msg.created_at,
+      msg.delivered ? 1 : 0,
+    ]
+  );
+}
+
+export function getChatHistory(
+  friend_device_uuid: string,
+  limit: number = 50
+): ChatMessage[] {
+  const rows = db.getAllSync<{
+    id: string;
+    thread_id: string;
+    friend_device_uuid: string;
+    body: string;
+    sender_id: string;
+    is_outgoing: number;
+    created_at: number;
+    delivered: number;
+  }>(
+    `SELECT * FROM chat_messages
+      WHERE friend_device_uuid = ?
+      ORDER BY created_at DESC
+      LIMIT ?`,
+    [friend_device_uuid, limit]
+  );
+  return rows
+    .map((row) => ({
+      ...row,
+      is_outgoing: row.is_outgoing === 1,
+      delivered: row.delivered === 1,
+    }))
+    .reverse();
+}
+
+export function markDelivered(message_id: string): void {
+  db.runSync(
+    'UPDATE chat_messages SET delivered = 1 WHERE id = ?',
+    [message_id]
+  );
+}
+
+export function getUndeliveredOutgoing(
+  friend_device_uuid: string
+): ChatMessage[] {
+  const rows = db.getAllSync<{
+    id: string;
+    thread_id: string;
+    friend_device_uuid: string;
+    body: string;
+    sender_id: string;
+    is_outgoing: number;
+    created_at: number;
+    delivered: number;
+  }>(
+    `SELECT * FROM chat_messages
+      WHERE friend_device_uuid = ?
+      AND is_outgoing = 1
+      AND delivered = 0`,
+    [friend_device_uuid]
+  );
+  return rows.map((row) => ({
+    ...row,
+    is_outgoing: row.is_outgoing === 1,
+    delivered: row.delivered === 1,
+  }));
 }
 
 export default initDatabase;

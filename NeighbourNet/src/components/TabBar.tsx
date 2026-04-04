@@ -2,13 +2,12 @@ import React from 'react'
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
 interface TabBarProps {
-  activeTab: 'sos' | 'mesh'
-  onTabChange: (tab: 'sos' | 'mesh') => void
+  activeTab: 'sos' | 'mesh' | 'friends' | 'profile'
+  onTabChange: (tab: 'sos' | 'mesh' | 'friends' | 'profile') => void
   criticalCount: number
-  queueDepth: number
 }
 
-const TabBar = ({ activeTab, onTabChange, criticalCount, queueDepth }: TabBarProps) => {
+const TabBar = ({ activeTab, onTabChange, criticalCount }: TabBarProps) => {
   return (
     <View style={styles.container}>
       <TouchableOpacity style={styles.tabButton} onPress={() => onTabChange('sos')} activeOpacity={0.8}>
@@ -27,18 +26,13 @@ const TabBar = ({ activeTab, onTabChange, criticalCount, queueDepth }: TabBarPro
             activeTab === 'sos' ? styles.bold : null,
           ]}
         >
-          Send SOS
+          SOS
         </Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.tabButton} onPress={() => onTabChange('mesh')} activeOpacity={0.8}>
         <View style={styles.iconWrap}>
           <Text style={[styles.icon, activeTab === 'mesh' ? styles.meshActive : styles.inactive]}>📡</Text>
-          {queueDepth > 0 ? (
-            <View style={styles.queueBadge}>
-              <Text style={styles.badgeText}>{queueDepth}</Text>
-            </View>
-          ) : null}
         </View>
         <Text
           style={[
@@ -47,7 +41,37 @@ const TabBar = ({ activeTab, onTabChange, criticalCount, queueDepth }: TabBarPro
             activeTab === 'mesh' ? styles.bold : null,
           ]}
         >
-          Mesh Status
+          Mesh
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.tabButton} onPress={() => onTabChange('friends')} activeOpacity={0.8}>
+        <View style={styles.iconWrap}>
+          <Text style={[styles.icon, activeTab === 'friends' ? styles.friendsActive : styles.inactive]}>👥</Text>
+        </View>
+        <Text
+          style={[
+            styles.label,
+            activeTab === 'friends' ? styles.friendsActive : styles.inactive,
+            activeTab === 'friends' ? styles.bold : null,
+          ]}
+        >
+          Friends
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.tabButton} onPress={() => onTabChange('profile')} activeOpacity={0.8}>
+        <View style={styles.iconWrap}>
+          <Text style={[styles.icon, activeTab === 'profile' ? styles.profileActive : styles.inactive]}>👤</Text>
+        </View>
+        <Text
+          style={[
+            styles.label,
+            activeTab === 'profile' ? styles.profileActive : styles.inactive,
+            activeTab === 'profile' ? styles.bold : null,
+          ]}
+        >
+          Profile
         </Text>
       </TouchableOpacity>
     </View>
@@ -86,7 +110,13 @@ const styles = StyleSheet.create({
     color: '#C62828',
   },
   meshActive: {
+    color: '#00897B',
+  },
+  friendsActive: {
     color: '#1A237E',
+  },
+  profileActive: {
+    color: '#283593',
   },
   inactive: {
     color: '#9E9E9E',
@@ -102,18 +132,6 @@ const styles = StyleSheet.create({
     height: 18,
     borderRadius: 9,
     backgroundColor: '#C62828',
-    paddingHorizontal: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  queueBadge: {
-    position: 'absolute',
-    top: -6,
-    right: -12,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: '#757575',
     paddingHorizontal: 4,
     alignItems: 'center',
     justifyContent: 'center',

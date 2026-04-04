@@ -141,3 +141,20 @@ export function onPeerDisconnected(callback: (data: PeerData) => void): () => vo
     subscription.remove()
   }
 }
+
+// CHANGE 6: Delivery acknowledgement listener.
+export function onMessageDelivered(
+  callback: (data: { message_id: string }) => void
+): () => void {
+  if (!NearbyMesh) return () => {}
+  const emitter = new NativeEventEmitter(NearbyMesh)
+  const sub = emitter.addListener('onMessageDelivered', (data: MessageEventData) => {
+    try {
+      const parsed = JSON.parse(data.message) as { message_id: string }
+      callback({ message_id: parsed.message_id })
+    } catch (error) {
+      console.error('Failed handling onMessageDelivered event', error)
+    }
+  })
+  return () => sub.remove()
+}

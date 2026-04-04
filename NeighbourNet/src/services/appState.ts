@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { getDeviceId } from '../db/database'
 
 const ONBOARDING_KEY = 'neighbournet_onboarding_complete'
 
@@ -17,4 +18,8 @@ export async function markOnboardingComplete(): Promise<void> {
   } catch (e) {
     console.error('Failed to save onboarding state:', e)
   }
+}
+
+export async function getDeviceUUID(): Promise<string> {
+  return getDeviceId()
 }
