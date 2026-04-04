@@ -2,6 +2,7 @@ import { NativeEventEmitter, NativeModules, Platform } from 'react-native'
 import type { NativeModule } from 'react-native'
 import { triageMessage } from './triageEngine'
 import type { Message } from '../types/message'
+import useMeshStore from '../store/meshStore'
 
 const NearbyMesh = (NativeModules as {
   NearbyMesh?: NativeModule & {
@@ -51,10 +52,22 @@ export async function stopMesh(): Promise<void> {
 
 export async function sendMessage(message: Message): Promise<number> {
   if (!NearbyMesh) {
+    console.warn('[NearbyMesh] module not available')
     return 0
   }
-
-  return NearbyMesh.sendMessage(JSON.stringify(message))
+  try {
+    const json = JSON.stringify(message)
+    console.log('[NearbyMesh] sendMessage called, size:', json.length, 'bytes')
+    const result = await NearbyMesh.sendMessage(json)
+    if (result > 0) {
+      useMeshStore.getState().incrementRelayed()
+    }
+    console.log('[NearbyMesh] sendMessage result — sent to peers:', result)
+    return result
+  } catch (e) {
+    console.error('[NearbyMesh] sendMessage error:', e)
+    return 0
+  }
 }
 
 export async function broadcastMessage(message: Message): Promise<number> {

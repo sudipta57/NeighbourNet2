@@ -20,7 +20,7 @@ import {
   saveChatMessage,
 } from '../db/database'
 import { getDeviceUUID } from '../services/appState'
-import { getDisplayName } from '../services/profileService'
+import { getDisplayName, getMyFriendCode } from '../services/profileService'
 import {
   onMessageDelivered,
   sendMessage,
@@ -40,10 +40,22 @@ function formatTime(timestamp: number): string {
 
 const ChatScreen = ({ onBack }: ChatScreenProps) => {
   const friend = useAppStore((state) => state.activeChatFriend)
+  const peerCount = useAppStore((state) => state.peerCount)
   const allChatMessages = useAppStore((state) => state.chatMessages)
-  const messages = friend?.device_uuid
-    ? (allChatMessages[friend.device_uuid] ?? [])
-    : []
+  // Merge messages stored under UUID key and friend_code key.
+  // During UUID discovery, some messages may land under the code, some under the UUID.
+  const messages = React.useMemo(() => {
+    if (!friend) return []
+    const byUUID = friend.device_uuid ? (allChatMessages[friend.device_uuid] ?? []) : []
+    const byCode = allChatMessages[friend.friend_code] ?? []
+    if (byUUID.length === 0) return byCode
+    if (byCode.length === 0) return byUUID
+    // Merge + dedup, preserving order
+    const seen = new Set<string>()
+    return [...byCode, ...byUUID]
+      .filter((m) => (seen.has(m.id) ? false : (seen.add(m.id), true)))
+      .sort((a, b) => a.created_at - b.created_at)
+  }, [allChatMessages, friend?.device_uuid, friend?.friend_code])
 
   const [inputText, setInputText] = useState('')
   const [myDeviceId, setMyDeviceId] = useState<string | null>(null)
@@ -57,14 +69,10 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
     getDeviceUUID().then(setMyDeviceId)
     getDisplayName().then(setMyDisplayName)
     const uuid = friend.device_uuid
-    if (!uuid) {
-      console.warn('[Chat] Friend UUID not known yet — waiting for first message')
-      return
+    if (uuid) {
+      const history = getChatHistory(uuid, 50)
+      history.forEach((msg) => useAppStore.getState().addChatMessage(uuid, msg))
     }
-    const history = getChatHistory(uuid, 50)
-    history.forEach((msg) => {
-      useAppStore.getState().addChatMessage(uuid, msg)
-    })
   }, [friend?.device_uuid])
 
   // Subscribe to delivery acks — mark matching outgoing messages as delivered.
@@ -92,8 +100,8 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
 
     setInputText('')
 
-    // Get or create a persistent thread ID for this friendship.
-    const threadKey = `thread_${friend.device_uuid}`
+    // Use friend_code-based thread key so it survives UUID being unknown initially
+    const threadKey = `thread_${friend.friend_code}`
     let threadId = await AsyncStorage.getItem(threadKey)
     if (!threadId) {
       threadId = uuidv4()
@@ -103,11 +111,13 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
     const msgId = uuidv4()
     const now = Date.now()
     const nowIso = new Date(now).toISOString()
+    // Use friend_code as fallback store key when UUID not yet known
+    const storeKey = friend.device_uuid || friend.friend_code
 
     const chatMsg: ChatMessage = {
       id: msgId,
       thread_id: threadId,
-      friend_device_uuid: friend.device_uuid,
+      friend_device_uuid: storeKey,
       body,
       sender_id: myDeviceId,
       is_outgoing: true,
@@ -116,16 +126,20 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
     }
 
     saveChatMessage(chatMsg)
-    useAppStore.getState().addChatMessage(friend.device_uuid, chatMsg)
+    useAppStore.getState().addChatMessage(storeKey, chatMsg)
 
+    const myCode = await getMyFriendCode()
     const meshMessage: Message = {
       message_id: msgId,
       body,
       sender_id: myDeviceId,
       sender_name: myDisplayName,
-      destination_id: friend.device_uuid,
+      // If UUID unknown: omit destination_id so message broadcasts to all peers
+      destination_id: friend.device_uuid || undefined,
       chat_thread_id: threadId,
       message_type: 'chat',
+      // Carry our friend code so the recipient can link our UUID to our code
+      location_hint: myCode,
       priority_tier: 'LOW',
       priority_score: 0,
       ttl: 10,
@@ -135,15 +149,16 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
       synced: false,
       gps_lat: null,
       gps_lng: null,
-      location_hint: '',
     }
 
+    console.log('[Chat] Sending to:', friend.device_uuid || '(broadcast)', 'peers:', peerCount)
     try {
-      await sendMessage(meshMessage)
+      const result = await sendMessage(meshMessage)
+      console.log('[Chat] sendMessage returned:', result)
     } catch (e) {
-      console.error('[ChatScreen] sendMessage failed:', e)
+      console.error('[Chat] sendMessage failed:', e)
     }
-  }, [inputText, myDeviceId, myDisplayName, friend])
+  }, [inputText, myDeviceId, myDisplayName, friend, peerCount])
 
   if (!friend) return null
 
@@ -205,6 +220,9 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
               {friend.display_name}
             </Text>
             <Text style={styles.headerCode}>Code: {friend.friend_code}</Text>
+            <Text style={[styles.peerStatus, { color: peerCount > 0 ? '#81C784' : '#FF8A65' }]}>
+              {peerCount > 0 ? `${peerCount} peer${peerCount > 1 ? 's' : ''} connected` : 'No peers — move closer'}
+            </Text>
           </View>
 
           <View
@@ -298,6 +316,10 @@ const styles = StyleSheet.create({
   headerCode: {
     color: 'rgba(255,255,255,0.6)',
     fontSize: 12,
+    marginTop: 2,
+  },
+  peerStatus: {
+    fontSize: 11,
     marginTop: 2,
   },
   statusDot: {

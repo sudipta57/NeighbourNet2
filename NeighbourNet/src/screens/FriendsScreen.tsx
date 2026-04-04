@@ -30,6 +30,10 @@ function getAvatarColor(name: string): string {
 }
 
 function getStatusInfo(friend: Friend): { dot: string; label: string } {
+  const hasUUID = friend.device_uuid !== '' && friend.device_uuid != null
+  if (!hasUUID) {
+    return { dot: '#9E9E9E', label: 'Waiting to identify...' }
+  }
   const now = Date.now()
   if (friend.last_seen_at !== null) {
     const diff = now - friend.last_seen_at
@@ -45,7 +49,7 @@ function getStatusInfo(friend: Friend): { dot: string; label: string } {
       return { dot: '#FFC107', label: `Last seen ${minutes}m ago` }
     }
   }
-  return { dot: '#9E9E9E', label: 'Not seen yet' }
+  return { dot: '#FFC107', label: 'Identified, not nearby' }
 }
 
 const FriendsScreen = ({ onOpenChat }: FriendsScreenProps) => {

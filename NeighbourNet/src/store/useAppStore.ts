@@ -173,12 +173,25 @@ const useAppStore = create<AppState>()((set, get) => ({
 	setFriends: (friends) => set({ friends }),
 
 	addFriend: (friend) =>
-		set((state) => ({
-			friends: [
-				...state.friends.filter((f) => f.device_uuid !== friend.device_uuid),
-				friend,
-			],
-		})),
+		set((state) => {
+			// Deduplicate by friend_code (primary key) and by device_uuid when known.
+			const filtered = state.friends.filter(
+				(f) =>
+					f.friend_code !== friend.friend_code &&
+					(friend.device_uuid === '' || f.device_uuid !== friend.device_uuid)
+			)
+			// If the chat screen is open on this friend, refresh activeChatFriend so
+			// ChatScreen immediately sees the new device_uuid (fixes stale-UUID display bug).
+			const active = state.activeChatFriend
+			const activeIsThisFriend =
+				active !== null &&
+				(active.friend_code === friend.friend_code ||
+					(friend.device_uuid !== '' && active.device_uuid === friend.device_uuid))
+			return {
+				friends: [...filtered, friend],
+				activeChatFriend: activeIsThisFriend ? friend : active,
+			}
+		}),
 
 	setActiveChatFriend: (friend) => set({ activeChatFriend: friend }),
 

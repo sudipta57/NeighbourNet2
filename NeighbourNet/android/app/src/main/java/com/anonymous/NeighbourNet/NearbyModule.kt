@@ -102,20 +102,17 @@ class NearbyModule(reactContext: ReactApplicationContext) : ReactContextBaseJava
         else null
       } catch (e: Exception) { null }
 
+      // Always emit to JS — JS layer checks destination_id against its own UUID.
+      // The native deviceId (Android ID) differs from the JS-generated UUID so we
+      // cannot do destination filtering here; JS handles it correctly.
+      sendEventToJS("onMessageReceived", messageJson)
+
       if (destinationId == null) {
-        // BROADCAST message (SOS) — existing behaviour, forward to all.
+        // BROADCAST — relay to all other peers.
         rebroadcastToAll(messageJson, sourceEndpointId)
-        sendEventToJS("onMessageReceived", messageJson)
-
-      } else if (destinationId == deviceId) {
-        // THIS message is FOR ME — deliver to JS, do not rebroadcast.
-        sendEventToJS("onMessageReceived", messageJson)
-        sendAcknowledgement(messageJson, sourceEndpointId)
-
       } else {
-        // Message is for SOMEONE ELSE — forward toward destination.
+        // DIRECTED — relay toward destination so multi-hop delivery works.
         rebroadcastToAll(messageJson, sourceEndpointId)
-        // Do NOT emit to JS — this is just a relay.
       }
     }
 
@@ -325,16 +322,34 @@ class NearbyModule(reactContext: ReactApplicationContext) : ReactContextBaseJava
 
   @ReactMethod
   fun sendMessage(messageJson: String, promise: Promise) {
-    val endpointIds = synchronized(connectedEndpoints) { connectedEndpoints.toList() }
-    if (endpointIds.isEmpty()) {
-      Log.d("NearbyMesh", "NearbyMesh: sendMessage called with no peers")
-      promise.resolve(0)
-      return
-    }
+    try {
+      val endpointIds = synchronized(connectedEndpoints) { connectedEndpoints.toList() }
+      Log.d("NearbyMesh", "NearbyMesh: sendMessage called, endpoints: ${endpointIds.size}")
+      Log.d("NearbyMesh", "NearbyMesh: message preview: ${messageJson.take(100)}")
 
-    Log.d("NearbyMesh", "NearbyMesh: sendMessage called")
-    connectionsClient.sendPayload(endpointIds, Payload.fromBytes(messageJson.toByteArray(Charsets.UTF_8)))
-    promise.resolve(endpointIds.size)
+      if (endpointIds.isEmpty()) {
+        Log.w("NearbyMesh", "NearbyMesh: sendMessage — no connected endpoints, message dropped")
+        promise.resolve(0)
+        return
+      }
+
+      val payload = Payload.fromBytes(messageJson.toByteArray(Charsets.UTF_8))
+      endpointIds.forEach { endpointId ->
+        connectionsClient.sendPayload(endpointId, payload)
+          .addOnSuccessListener {
+            Log.d("NearbyMesh", "NearbyMesh: payload sent to: $endpointId")
+          }
+          .addOnFailureListener { e ->
+            Log.e("NearbyMesh", "NearbyMesh: payload failed to $endpointId: ${e.message}")
+          }
+      }
+
+      Log.d("NearbyMesh", "NearbyMesh: sendMessage dispatched to ${endpointIds.size} endpoints")
+      promise.resolve(endpointIds.size)
+    } catch (e: Exception) {
+      Log.e("NearbyMesh", "NearbyMesh: sendMessage error: ${e.message}")
+      promise.reject("SEND_ERROR", e.message)
+    }
   }
 
   @ReactMethod
