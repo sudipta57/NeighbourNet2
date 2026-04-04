@@ -1,22 +1,21 @@
 :root {
-  --color-bg-base: #f5f0e8;
-  --color-panel-surface: #ede8dc;
-  --color-panel-border: #d4ccbb;
-  --color-accent-blue: #7a9bb5;
-  --color-accent-sage: #8aaf8a;
-  --color-critical: #c97b6a;
-  --color-high: #c9a85a;
-  --color-medium: #6aabaa;
-  --color-low: #8a9aaa;
-  --color-text-primary: #2e2a22;
-  --color-text-secondary: #6b6358;
-  --color-positive: #7a9e6a;
-  --color-inactive: #bbada0;
-  --color-shadow: rgba(80, 60, 40, 0.15);
+  --color-bg-base: #f8fafc;
+  --color-panel-surface: #ffffff;
+  --color-panel-border: #e2e8f0;
+  --color-accent-blue: #2563eb;
+  --color-critical: #ef4444;
+  --color-high: #f59e0b;
+  --color-medium: #0ea5e9;
+  --color-low: #64748b;
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-positive: #22c55e;
+  --color-inactive: #cbd5e1;
+  --color-shadow: rgba(15, 23, 42, 0.06);
 
-  --font-serif: var(--font-lora), Georgia, serif;
+  --font-serif: var(--font-inter), "Inter", sans-serif;
   --font-mono: var(--font-jetbrains-mono), monospace;
-  --font-sans: var(--font-inter), "Source Sans Pro", sans-serif;
+  --font-sans: var(--font-inter), "Inter", sans-serif;
 }
 
 body {
@@ -24,286 +23,236 @@ body {
   color: var(--color-text-primary);
   font-family: var(--font-sans);
   margin: 0;
-  overflow: hidden; /* no scroll on outer container */
+  overflow: hidden;
 }
 
 .skeu-panel {
   background-color: var(--color-panel-surface);
-  background-image: url("/noise-texture.svg"); /* subtle linen grain */
   border: 1px solid var(--color-panel-border);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.6),
-    /* bevel highlight top */ inset 0 -1px 0 rgba(80, 60, 40, 0.12),
-    /* bevel shadow bottom */ 0 4px 16px var(--color-shadow); /* outer drop shadow */
-  border-radius: 6px;
+  box-shadow: 0 4px 6px -1px var(--color-shadow), 0 2px 4px -2px var(--color-shadow);
+  border-radius: 8px;
 }
 
 .skeu-button {
-  background: linear-gradient(180deg, #8cafc4 0%, #6a8fa8 100%);
-  box-shadow:
-    0 2px 0 rgba(40, 30, 20, 0.25),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
-  border-radius: 4px;
-  border: none;
+  background: var(--color-panel-surface);
+  border: 1px solid var(--color-panel-border);
+  box-shadow: 0 1px 2px 0 var(--color-shadow);
+  border-radius: 6px;
   cursor: pointer;
-  color: white;
-  transition:
-    box-shadow 80ms ease,
-    transform 80ms ease;
+  color: var(--color-text-primary);
+  transition: all 150ms ease;
   display: flex;
   align-items: center;
   justify-content: center;
 }
+.skeu-button:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
 .skeu-button:active {
-  box-shadow: inset 0 2px 4px rgba(40, 30, 20, 0.3);
-  transform: translateY(1px);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+.skeu-button.primary {
+  background: var(--color-accent-blue);
+  color: white;
+  border: none;
+}
+.skeu-button.primary:hover {
+  background: #1d4ed8;
 }
 
 .card-critical {
   animation: criticalPulse 2.5s ease-in-out infinite;
 }
 @keyframes criticalPulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(201, 123, 106, 0);
-  }
-  50% {
-    box-shadow: 0 0 0 6px rgba(201, 123, 106, 0.35);
-  }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+  50% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.2); }
 }
 
-/* Custom SOS Pin */
+/* Custom Organization Pin: Flat Dot rather than teardrop pin */
 .pin-head {
-  width: 24px;
-  height: 24px;
-  border-radius: 50% 50% 50% 0;
-  transform: rotate(-45deg);
-  box-shadow:
-    2px 2px 4px rgba(80, 60, 40, 0.4),
-    inset -2px -2px 4px rgba(0, 0, 0, 0.15),
-    inset 2px 2px 4px rgba(255, 255, 255, 0.2);
-}
-.pin-shadow {
-  width: 10px;
-  height: 4px;
-  background: rgba(80, 60, 40, 0.2);
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  margin: 2px auto 0;
-  filter: blur(2px);
+  border: 2px solid white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  margin-top: 10px;
 }
-.pin-CRITICAL .pin-head {
-  background: var(--color-critical);
-}
-.pin-HIGH .pin-head {
-  background: var(--color-high);
-}
-.pin-MEDIUM .pin-head {
-  background: var(--color-medium);
-}
-.pin-LOW .pin-head {
-  background: var(--color-low);
-}
+.pin-CRITICAL .pin-head { background: var(--color-critical); }
+.pin-HIGH .pin-head { background: var(--color-high); }
+.pin-MEDIUM .pin-head { background: var(--color-medium); }
+.pin-LOW .pin-head { background: var(--color-low); }
 
-/* Gateway warning banner */
+/* Gateway warning banner -> Network Warning */
 .gateway-warning-banner {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  top: 0; left: 0; right: 0;
   z-index: 999;
   background: var(--color-high);
-  color: var(--color-text-primary);
+  color: #fff;
   font-family: var(--font-sans);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   padding: 8px 16px;
   text-align: center;
 }
 
-/* Leaflet dark/muted overrides (optional but recommended) */
+/* Leaflet Overrides */
 .leaflet-container {
-  background: var(--color-panel-border);
+  background: #f1f5f9;
   font-family: var(--font-sans) !important;
 }
 .leaflet-tooltip {
-  background: #fff8dc !important;
-  border: 1px solid #d4ccbb !important;
-  rotate: -1deg;
-  box-shadow: 2px 3px 8px var(--color-shadow) !important;
-  border-radius: 2px;
+  background: var(--color-panel-surface) !important;
+  border: 1px solid var(--color-panel-border) !important;
+  box-shadow: 0 4px 6px -1px var(--color-shadow) !important;
+  border-radius: 6px;
   color: var(--color-text-primary) !important;
   font-family: var(--font-sans) !important;
   white-space: normal !important;
   max-width: 240px;
 }
-.leaflet-tooltip::before {
-  display: none !important; /* Hide tooltip arrow if desired */
-}
+.leaflet-tooltip::before { display: none !important; }
 
-/* Fix 1: Priority Badge */
+/* Priority Badge */
 .priority-badge {
   display: inline-block;
-  padding: 3px 10px;
-  border-radius: 20px;
+  padding: 4px 10px;
+  border-radius: 4px;
   font-family: var(--font-sans);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #ffffff;
-
-  /* Raised embossed look — not flat */
-  box-shadow:
-    0 2px 4px var(--color-shadow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.12);
 }
+.priority-badge--critical { background-color: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+.priority-badge--high     { background-color: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+.priority-badge--medium   { background-color: #e0f2fe; color: #075985; border: 1px solid #bae6fd; }
+.priority-badge--low      { background-color: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
 
-.priority-badge--critical { background-color: var(--color-critical); }
-.priority-badge--high     { background-color: var(--color-high);     }
-.priority-badge--medium   { background-color: var(--color-medium);   }
-.priority-badge--low      { background-color: var(--color-low);      }
-
-/* Fix 2: Map Bezel */
+/* Map Bezel */
 .map-bezel {
-  background-color: var(--color-panel-border); /* #D4CCBB */
-  padding: 10px;
+  background-color: var(--color-panel-surface);
+  padding: 8px;
   border-radius: 8px;
-  box-shadow:
-    0 4px 16px var(--color-shadow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5),   /* bevel highlight top */
-    inset 0 -1px 0 rgba(80, 60, 40, 0.2);     /* bevel shadow bottom */
+  border: 1px solid var(--color-panel-border);
+  box-shadow: 0 1px 3px 0 var(--color-shadow);
   height: 100%;
 }
-
 .map-screen {
   width: 100%;
   height: 100%;
-  border-radius: 4px;
+  border-radius: 6px;
   overflow: hidden;
-
-  /* The recessed inset effect — light hitting the screen edges */
-  box-shadow:
-    inset 0 4px 10px rgba(80, 60, 40, 0.22),
-    inset 0 -4px 10px rgba(80, 60, 40, 0.18),
-    inset 4px 0 10px rgba(80, 60, 40, 0.15),
-    inset -4px 0 10px rgba(80, 60, 40, 0.15);
+  border: 1px solid var(--color-panel-border);
 }
 
-/* Fix 3: Queue depth & sync readout */
+/* Queue meter housing */
 .queue-meter-housing {
-  height: 20px;
-  border-radius: 4px;
-  background: var(--color-panel-border);
-  box-shadow: inset 0 2px 5px rgba(80, 60, 40, 0.25);  /* inset trough */
+  height: 12px;
+  border-radius: 6px;
+  background: #f1f5f9;
   overflow: hidden;
   margin-top: 6px;
 }
-
 .queue-meter-fill {
   height: 100%;
-  background: var(--color-accent-blue);   /* #7A9BB5 */
-  border-radius: 4px;
+  background: var(--color-accent-blue);
+  border-radius: 6px;
   transition: width 800ms ease;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .sync-readout {
-  background: var(--color-text-primary);   /* #2E2A22 */
+  background: #f8fafc;
+  border: 1px solid var(--color-panel-border);
   border-radius: 4px;
   padding: 8px 12px;
   margin-top: 10px;
   font-family: var(--font-mono);
-  font-size: 13px;
-  color: var(--color-positive);            /* #7A9E6A — terminal green */
-  letter-spacing: 0.04em;
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4);
+  font-size: 12px;
+  color: var(--color-text-secondary);
 }
 
-/* Fix 4: Donut Legend */
+/* Donut Legend */
 .donut-legend {
   display: flex;
   gap: 12px;
   justify-content: center;
-  margin-top: 8px;
+  margin-top: 12px;
   flex-wrap: wrap;
 }
 .legend-item {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   font-family: var(--font-sans);
-  font-size: 10px;
+  font-size: 11px;
   color: var(--color-text-secondary);
 }
 .legend-dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: 2px;
   flex-shrink: 0;
 }
 .legend-count {
   font-family: var(--font-mono);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--color-text-primary);
 }
 
-/* Fix 5: Sticky Note Popup */
+/* Flat Popup replaces sticky-note */
 .sticky-note-popup .leaflet-popup-content-wrapper {
-  background: #FFF8DC;
+  background: var(--color-panel-surface);
   border: 1px solid var(--color-panel-border);
-  border-radius: 3px;
-  box-shadow: 3px 4px 10px var(--color-shadow);
-  transform: rotate(-1.2deg);
+  border-radius: 6px;
+  box-shadow: 0 10px 15px -3px var(--color-shadow);
   padding: 0;
 }
-
 .sticky-note-popup .leaflet-popup-tip-container {
-  display: none;   /* hide the default arrow */
+  display: none;
 }
-
 .sticky-note-inner {
-  padding: 10px 12px;
-  min-width: 180px;
-  max-width: 240px;
+  padding: 12px 14px;
+  min-width: 200px;
+  max-width: 260px;
 }
 
+/* Keep the old classes for React mapping but style them clean */
 .popup-badge {
   font-family: var(--font-sans);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #fff;
-  padding: 2px 7px;
-  border-radius: 10px;
+  padding: 3px 6px;
+  border-radius: 4px;
   display: inline-block;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
-.popup-badge--critical { background: var(--color-critical); }
-.popup-badge--high     { background: var(--color-high);     }
-.popup-badge--medium   { background: var(--color-medium);   }
-.popup-badge--low      { background: var(--color-low);      }
+.popup-badge--critical { background-color: #fee2e2; color: #991b1b; }
+.popup-badge--high     { background-color: #fef3c7; color: #92400e; }
+.popup-badge--medium   { background-color: #e0f2fe; color: #075985; }
+.popup-badge--low      { background-color: #f1f5f9; color: #475569; }
 
 .popup-location {
-  font-family: var(--font-serif);
-  font-size: 13px;
-  font-weight: 700;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
   color: var(--color-text-primary);
-  margin: 0 0 4px;
+  margin: 0 0 6px;
 }
 
 .popup-body {
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--color-text-secondary);
-  font-style: italic;
-  margin: 0 0 6px;
-  line-height: 1.4;
+  line-height: 1.5;
+  margin: 0 0 10px;
 }
 
 .popup-meta {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   color: var(--color-inactive);
 }

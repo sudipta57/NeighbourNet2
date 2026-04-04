@@ -27,15 +27,14 @@ export default function LeftSidebar({ messages, onDispatch, loading = false, sel
       
       {/* Header */}
       <div className="p-4 border-b shrink-0 flex items-center justify-between" style={{ borderColor: 'var(--color-panel-border)' }}>
-        <h2 style={{ fontFamily: 'var(--font-serif)', fontVariant: 'small-caps', fontSize: '18px', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>
-          SOS Queue
+        <h2 style={{ fontFamily: 'var(--font-sans)', fontSize: '16px', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>
+          Active Tasks
         </h2>
         <div 
           className="px-2 py-0.5 rounded-full"
           style={{
-            backgroundColor: 'var(--color-critical)', color: 'white',
-            fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 'bold',
-            boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.2)'
+            backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5',
+            fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 'bold'
           }}
         >
           {loading ? '…' : liveCount}
@@ -94,7 +93,7 @@ export default function LeftSidebar({ messages, onDispatch, loading = false, sel
             style={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-sans)', fontSize: '13px', textAlign: 'center' }}
           >
             <span style={{ fontSize: '28px', marginBottom: '8px' }}>✓</span>
-            No active SOS alerts
+            No active tasks
             {filter !== 'ALL' && <span style={{ marginTop: '4px', fontSize: '11px' }}>in {filter} tier</span>}
           </div>
         ) : (

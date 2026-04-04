@@ -53,8 +53,8 @@ export default function Header({ meshStatus, onAcknowledgeAll }: HeaderProps) {
         <div style={{ fontFamily: 'var(--font-serif)', fontWeight: 'bold', fontSize: '20px', color: 'var(--color-text-primary)' }}>
           NeighbourNet
         </div>
-        <div style={{ fontFamily: 'var(--font-sans)', fontSize: '11px', fontVariant: 'small-caps', letterSpacing: '0.05em', color: 'var(--color-text-secondary)' }}>
-          NDRF District Control &middot; West Bengal
+        <div style={{ fontFamily: 'var(--font-sans)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-secondary)' }}>
+          Global Operations &middot; Live Dashboard
         </div>
       </div>
 
@@ -62,22 +62,21 @@ export default function Header({ meshStatus, onAcknowledgeAll }: HeaderProps) {
       <div 
         className="flex items-center px-6 py-2 rounded"
         style={{
-          border: '1px solid var(--color-high)',
-          boxShadow: '0 0 12px rgba(201,168,90,0.4), inset 0 2px 4px rgba(0,0,0,0.05)',
-          backgroundColor: 'var(--color-panel-surface)',
+          border: '1px solid var(--color-panel-border)',
+          backgroundColor: '#f1f5f9',
         }}
       >
         <span 
           style={{
-            fontFamily: 'var(--font-serif)',
+            fontFamily: 'var(--font-sans)',
             textTransform: 'uppercase',
             letterSpacing: '0.1em',
             fontWeight: 600,
-            fontSize: '14px',
-            color: 'var(--color-text-primary)'
+            fontSize: '13px',
+            color: 'var(--color-accent-blue)'
           }}
         >
-          ⚡ CYCLONE DANA — ACTIVE INCIDENT
+          🌐 Organizational Tracking — Online
         </span>
       </div>
 
