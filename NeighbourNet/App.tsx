@@ -6,24 +6,33 @@ import NetInfo from '@react-native-community/netinfo'
 import OnboardingScreen from './src/screens/OnboardingScreen'
 import SosScreen from './src/screens/SosScreen'
 import MeshStatusScreen from './src/screens/MeshStatusScreen'
+import FriendsScreen from './src/screens/FriendsScreen'
+import ProfileScreen from './src/screens/ProfileScreen'
+import ChatScreen from './src/screens/ChatScreen'
 import TabBar from './src/components/TabBar'
-import { isOnboardingComplete, markOnboardingComplete } from './src/services/appState'
+import { isOnboardingComplete, markOnboardingComplete, getDeviceUUID } from './src/services/appState'
 import { startGatewaySync, stopGatewaySync } from './src/services/gatewaySync'
 import { onMessageReceived, onPeerConnected, onPeerDisconnected, startMesh, stopMesh } from './src/services/meshService'
-import { initDatabase } from './src/db/database'
+import { initDatabase, saveChatMessage, updateFriendLastSeen, getFriendByUUID, getFriendByCode, getFriends, saveFriend } from './src/db/database'
 import { flushPendingMeshForwards } from './src/services/meshRelay'
 import useAppStore from './src/store/useAppStore'
+import useMeshStore from './src/store/meshStore'
+import { startTelemetryReporter, stopTelemetryReporter } from './src/mesh/telemetryReporter'
+import { Friend, ChatMessage } from './src/types/message'
+import { generateFriendCode } from './src/services/profileService'
+import { startBeacon, stopBeacon } from './src/services/beaconService'
 
 const PEER_REFRESH_INTERVAL_MS = 15000
+
+type TabName = 'sos' | 'mesh' | 'friends' | 'profile' | 'chat'
 
 const App = () => {
   const [appReady, setAppReady] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
-  const [activeTab, setActiveTab] = useState<'sos' | 'mesh'>('sos')
+  const [activeTab, setActiveTab] = useState<TabName>('sos')
   const [initError, setInitError] = useState<string | null>(null)
 
   const messages = useAppStore((state) => state.messages)
-  const queueDepth = useAppStore((state) => state.queueDepth)
 
   const criticalCount = messages.filter((message) => message.priority_tier === 'CRITICAL').length
 
@@ -176,6 +185,7 @@ const App = () => {
         }
 
         await startMesh()
+        await startBeacon()
         useAppStore.getState().setMeshActive(true)
         const initialPeerCount = await useAppStore.getState().triggerPeerScan()
         if (initialPeerCount > 0) {
@@ -191,19 +201,145 @@ const App = () => {
           })()
         }, PEER_REFRESH_INTERVAL_MS)
 
-        unsubMessage = onMessageReceived(async (message) => {
-          useAppStore.getState().addMessage(message)
+        unsubMessage = onMessageReceived(async (incomingMeshMessage) => {
+          // Handle identity beacon — link friend code to real UUID
+          if (incomingMeshMessage.message_type === 'location_beacon') {
+            const senderUUID = incomingMeshMessage.sender_id
+            const senderName = incomingMeshMessage.sender_name ?? ''
+
+            // Extract friend code from location_hint first, then fall back to body
+            let senderCode = incomingMeshMessage.location_hint?.trim() ?? ''
+            if (!senderCode && incomingMeshMessage.body?.startsWith('BEACON:')) {
+              senderCode = incomingMeshMessage.body.replace('BEACON:', '').trim()
+            }
+
+            console.log('[Beacon] Received from UUID:', senderUUID, 'code:', senderCode)
+
+            if (!senderCode || !senderUUID) return
+
+            // Normalize to 4 digits with leading zeros (e.g. "509" → "0509")
+            const normalizedCode = senderCode.padStart(4, '0')
+
+            // Try finding friend — padded first, then raw, then by UUID
+            const existingFriend =
+              getFriendByCode(normalizedCode) ??
+              getFriendByCode(senderCode) ??
+              getFriendByUUID(senderUUID)
+
+            if (existingFriend) {
+              if (existingFriend.device_uuid !== senderUUID) {
+                const updatedFriend = {
+                  ...existingFriend,
+                  device_uuid: senderUUID,
+                  display_name: senderName || existingFriend.display_name,
+                  last_seen_at: Date.now(),
+                  hop_distance: incomingMeshMessage.hop_count ?? 1,
+                }
+                saveFriend(updatedFriend)
+                useAppStore.getState().addFriend(updatedFriend)
+                console.log('[Beacon] ✅ Linked friend', normalizedCode, '→', senderUUID)
+              } else {
+                updateFriendLastSeen(senderUUID, Date.now(), incomingMeshMessage.hop_count ?? 1)
+              }
+            } else {
+              console.log('[Beacon] ⚠️ No friend found for code:', normalizedCode)
+              console.log('[Beacon] Saved friend codes:', getFriends().map(f => f.friend_code))
+            }
+            return
+          }
+
+          // Handle SOS messages (and legacy messages with no type)
+          if (!incomingMeshMessage.message_type || incomingMeshMessage.message_type === 'sos') {
+            useAppStore.getState().addMessage(incomingMeshMessage)
+            return
+          }
+
+          // Handle incoming CHAT messages
+          if (incomingMeshMessage.message_type === 'chat') {
+            const myUUID = await getDeviceUUID()
+
+            // Accept if addressed to me directly, or broadcast (no destination_id)
+            const isDirectToMe = incomingMeshMessage.destination_id === myUUID
+            const isBroadcast = !incomingMeshMessage.destination_id
+            if (!isDirectToMe && !isBroadcast) return
+
+            const senderUUID = incomingMeshMessage.sender_id
+            const senderCode = incomingMeshMessage.location_hint?.trim() ?? ''
+
+            // Auto-link sender's UUID to their friend code if we have them saved
+            if (senderCode) {
+              const normalizedCode = senderCode.padStart(4, '0')
+              const friendByCode =
+                getFriendByCode(normalizedCode) ?? getFriendByCode(senderCode)
+              if (friendByCode && friendByCode.device_uuid !== senderUUID) {
+                const linked: Friend = {
+                  ...friendByCode,
+                  device_uuid: senderUUID,
+                  display_name: incomingMeshMessage.sender_name ?? friendByCode.display_name,
+                  last_seen_at: Date.now(),
+                  hop_distance: incomingMeshMessage.hop_count ?? 1,
+                }
+                saveFriend(linked)
+                useAppStore.getState().addFriend(linked)
+                console.log('[Chat] ✅ Auto-linked sender', normalizedCode, '→', senderUUID)
+              }
+            }
+
+            const chatMsg: ChatMessage = {
+              id: incomingMeshMessage.message_id,
+              thread_id: incomingMeshMessage.chat_thread_id ?? incomingMeshMessage.message_id,
+              friend_device_uuid: senderUUID,
+              body: incomingMeshMessage.body,
+              sender_id: senderUUID,
+              is_outgoing: false,
+              created_at: Date.now(),
+              delivered: true,
+            }
+
+            saveChatMessage(chatMsg)
+            useAppStore.getState().addChatMessage(senderUUID, chatMsg)
+            updateFriendLastSeen(senderUUID, Date.now(), incomingMeshMessage.hop_count ?? 1)
+
+            // Add unknown sender as a new friend
+            if (!getFriendByUUID(senderUUID)) {
+              const newFriend: Friend = {
+                friend_code: generateFriendCode(senderUUID),
+                device_uuid: senderUUID,
+                display_name: incomingMeshMessage.sender_name ??
+                  'Friend ' + generateFriendCode(senderUUID),
+                last_seen_at: Date.now(),
+                hop_distance: incomingMeshMessage.hop_count ?? 1,
+                added_at: Date.now(),
+              }
+              saveFriend(newFriend)
+              useAppStore.getState().addFriend(newFriend)
+            }
+
+            console.log('[Chat] ✅ Received from:', senderUUID, 'body:', incomingMeshMessage.body)
+          }
         })
 
-        unsubConnected = onPeerConnected(({ peerCount }) => {
-          useAppStore.getState().setPeerCount(peerCount)
-          if (peerCount > 0) {
+        unsubConnected = onPeerConnected((data) => {
+          useAppStore.getState().setPeerCount(data.peerCount)
+          const meshState = useMeshStore.getState()
+          if (data.endpointId && !meshState.currentPeers.some((peer) => peer.id === data.endpointId)) {
+            // TODO: Update transport from native callback if Nearby module emits BLE vs WIFI_DIRECT metadata.
+            meshState.setPeers([
+              ...meshState.currentPeers,
+              { id: data.endpointId, transport: 'BLE' },
+            ])
+          }
+          if (data.peerCount > 0) {
             void flushPendingMeshQueue()
           }
         })
 
-        unsubDisconnected = onPeerDisconnected(({ peerCount }) => {
-          useAppStore.getState().setPeerCount(peerCount)
+        unsubDisconnected = onPeerDisconnected((data) => {
+          useAppStore.getState().setPeerCount(data.peerCount)
+          const meshState = useMeshStore.getState()
+          if (data.endpointId) {
+            meshState.setPeers(meshState.currentPeers.filter((peer) => peer.id !== data.endpointId))
+          }
         })
       } catch (e) {
         console.error('App init error:', e)
@@ -214,6 +350,7 @@ const App = () => {
 
     return () => {
       stopGatewaySync()
+      stopBeacon()
       netInfoUnsubscribe?.()
       if (peerRefreshTimer) {
         clearInterval(peerRefreshTimer)
@@ -226,9 +363,25 @@ const App = () => {
     }
   }, [])
 
+  useEffect(() => {
+    startTelemetryReporter()
+    return () => {
+      stopTelemetryReporter()
+    }
+  }, [])
+
   const handleOnboardingComplete = useCallback(async () => {
     await markOnboardingComplete()
     setShowOnboarding(false)
+  }, [])
+
+  const handleOpenChat = useCallback((friend: Friend) => {
+    useAppStore.getState().setActiveChatFriend(friend)
+    setActiveTab('chat')
+  }, [])
+
+  const handleChatBack = useCallback(() => {
+    setActiveTab('friends')
   }, [])
 
   if (!appReady) {
@@ -247,6 +400,8 @@ const App = () => {
     return <OnboardingScreen onComplete={handleOnboardingComplete} />
   }
 
+  const visibleTab = activeTab === 'chat' ? 'friends' : activeTab
+
   return (
     <SafeAreaProvider>
       <View style={styles.container}>
@@ -259,13 +414,23 @@ const App = () => {
           <View style={[styles.screen, activeTab !== 'mesh' && styles.hidden]}>
             <MeshStatusScreen />
           </View>
+          <View style={[styles.screen, activeTab !== 'friends' && styles.hidden]}>
+            <FriendsScreen onOpenChat={handleOpenChat} />
+          </View>
+          <View style={[styles.screen, activeTab !== 'profile' && styles.hidden]}>
+            <ProfileScreen />
+          </View>
+          {activeTab === 'chat' ? (
+            <View style={styles.screen}>
+              <ChatScreen onBack={handleChatBack} />
+            </View>
+          ) : null}
         </View>
 
         <TabBar
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
+          activeTab={visibleTab as 'sos' | 'mesh' | 'friends' | 'profile'}
+          onTabChange={(tab) => setActiveTab(tab)}
           criticalCount={criticalCount}
-          queueDepth={queueDepth}
         />
       </View>
     </SafeAreaProvider>

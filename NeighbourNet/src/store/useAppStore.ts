@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { Message, PriorityTier } from '../types/message'
+import { Message, PriorityTier, Friend, ChatMessage } from '../types/message'
 import {
 	insertMessage,
 	getUnsyncedMessages,
@@ -7,6 +7,7 @@ import {
 	getQueueDepth,
 	getAllMessages,
 	isSeenMessage,
+	getFriends,
 } from '../db/database'
 import { getConnectedPeerCount, scanNearbyPeers } from '../services/meshService'
 import { startMesh } from '../services/meshService'
@@ -28,6 +29,10 @@ interface AppState {
 
 	deviceId: string | null
 
+	friends: Friend[]
+	activeChatFriend: Friend | null
+	chatMessages: Record<string, ChatMessage[]>
+
 	setMeshActive: (active: boolean) => void
 	setPeerCount: (count: number) => void
 	refreshPeerCount: () => Promise<number>
@@ -45,6 +50,13 @@ interface AppState {
 	markSynced: (message_ids: string[]) => void
 
 	setDeviceId: (id: string) => void
+
+	setFriends: (friends: Friend[]) => void
+	addFriend: (friend: Friend) => void
+	setActiveChatFriend: (friend: Friend | null) => void
+	addChatMessage: (friend_uuid: string, msg: ChatMessage) => void
+	markChatMessageDelivered: (friend_uuid: string, message_id: string) => void
+	loadFriendsFromDB: () => void
 }
 
 const useAppStore = create<AppState>()((set, get) => ({
@@ -58,6 +70,10 @@ const useAppStore = create<AppState>()((set, get) => ({
 	gatewayStatus: 'idle',
 	lastSyncTime: null,
 	deviceId: null,
+
+	friends: [],
+	activeChatFriend: null,
+	chatMessages: {},
 
 	setMeshActive: (active) => set({ isMeshActive: active }),
 
@@ -153,6 +169,58 @@ const useAppStore = create<AppState>()((set, get) => ({
 	},
 
 	setDeviceId: (id) => set({ deviceId: id }),
+
+	setFriends: (friends) => set({ friends }),
+
+	addFriend: (friend) =>
+		set((state) => {
+			// Deduplicate by friend_code (primary key) and by device_uuid when known.
+			const filtered = state.friends.filter(
+				(f) =>
+					f.friend_code !== friend.friend_code &&
+					(friend.device_uuid === '' || f.device_uuid !== friend.device_uuid)
+			)
+			// If the chat screen is open on this friend, refresh activeChatFriend so
+			// ChatScreen immediately sees the new device_uuid (fixes stale-UUID display bug).
+			const active = state.activeChatFriend
+			const activeIsThisFriend =
+				active !== null &&
+				(active.friend_code === friend.friend_code ||
+					(friend.device_uuid !== '' && active.device_uuid === friend.device_uuid))
+			return {
+				friends: [...filtered, friend],
+				activeChatFriend: activeIsThisFriend ? friend : active,
+			}
+		}),
+
+	setActiveChatFriend: (friend) => set({ activeChatFriend: friend }),
+
+	addChatMessage: (friend_uuid, msg) =>
+		set((state) => ({
+			chatMessages: {
+				...state.chatMessages,
+				[friend_uuid]: [...(state.chatMessages[friend_uuid] ?? []), msg],
+			},
+		})),
+
+	markChatMessageDelivered: (friend_uuid, message_id) =>
+		set((state) => ({
+			chatMessages: {
+				...state.chatMessages,
+				[friend_uuid]: (state.chatMessages[friend_uuid] ?? []).map((m) =>
+					m.id === message_id ? { ...m, delivered: true } : m
+				),
+			},
+		})),
+
+	loadFriendsFromDB: () => {
+		try {
+			const result = getFriends()
+			set({ friends: result })
+		} catch (error) {
+			console.error('Failed to load friends from DB:', error)
+		}
+	},
 }))
 
 export default useAppStore
