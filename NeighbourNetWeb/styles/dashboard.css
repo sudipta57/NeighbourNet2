@@ -1,0 +1,309 @@
+:root {
+  --color-bg-base: #f5f0e8;
+  --color-panel-surface: #ede8dc;
+  --color-panel-border: #d4ccbb;
+  --color-accent-blue: #7a9bb5;
+  --color-accent-sage: #8aaf8a;
+  --color-critical: #c97b6a;
+  --color-high: #c9a85a;
+  --color-medium: #6aabaa;
+  --color-low: #8a9aaa;
+  --color-text-primary: #2e2a22;
+  --color-text-secondary: #6b6358;
+  --color-positive: #7a9e6a;
+  --color-inactive: #bbada0;
+  --color-shadow: rgba(80, 60, 40, 0.15);
+
+  --font-serif: var(--font-lora), Georgia, serif;
+  --font-mono: var(--font-jetbrains-mono), monospace;
+  --font-sans: var(--font-inter), "Source Sans Pro", sans-serif;
+}
+
+body {
+  background-color: var(--color-bg-base);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  margin: 0;
+  overflow: hidden; /* no scroll on outer container */
+}
+
+.skeu-panel {
+  background-color: var(--color-panel-surface);
+  background-image: url("/noise-texture.svg"); /* subtle linen grain */
+  border: 1px solid var(--color-panel-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    /* bevel highlight top */ inset 0 -1px 0 rgba(80, 60, 40, 0.12),
+    /* bevel shadow bottom */ 0 4px 16px var(--color-shadow); /* outer drop shadow */
+  border-radius: 6px;
+}
+
+.skeu-button {
+  background: linear-gradient(180deg, #8cafc4 0%, #6a8fa8 100%);
+  box-shadow:
+    0 2px 0 rgba(40, 30, 20, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  color: white;
+  transition:
+    box-shadow 80ms ease,
+    transform 80ms ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.skeu-button:active {
+  box-shadow: inset 0 2px 4px rgba(40, 30, 20, 0.3);
+  transform: translateY(1px);
+}
+
+.card-critical {
+  animation: criticalPulse 2.5s ease-in-out infinite;
+}
+@keyframes criticalPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(201, 123, 106, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(201, 123, 106, 0.35);
+  }
+}
+
+/* Custom SOS Pin */
+.pin-head {
+  width: 24px;
+  height: 24px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  box-shadow:
+    2px 2px 4px rgba(80, 60, 40, 0.4),
+    inset -2px -2px 4px rgba(0, 0, 0, 0.15),
+    inset 2px 2px 4px rgba(255, 255, 255, 0.2);
+}
+.pin-shadow {
+  width: 10px;
+  height: 4px;
+  background: rgba(80, 60, 40, 0.2);
+  border-radius: 50%;
+  margin: 2px auto 0;
+  filter: blur(2px);
+}
+.pin-CRITICAL .pin-head {
+  background: var(--color-critical);
+}
+.pin-HIGH .pin-head {
+  background: var(--color-high);
+}
+.pin-MEDIUM .pin-head {
+  background: var(--color-medium);
+}
+.pin-LOW .pin-head {
+  background: var(--color-low);
+}
+
+/* Gateway warning banner */
+.gateway-warning-banner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 999;
+  background: var(--color-high);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  text-align: center;
+}
+
+/* Leaflet dark/muted overrides (optional but recommended) */
+.leaflet-container {
+  background: var(--color-panel-border);
+  font-family: var(--font-sans) !important;
+}
+.leaflet-tooltip {
+  background: #fff8dc !important;
+  border: 1px solid #d4ccbb !important;
+  rotate: -1deg;
+  box-shadow: 2px 3px 8px var(--color-shadow) !important;
+  border-radius: 2px;
+  color: var(--color-text-primary) !important;
+  font-family: var(--font-sans) !important;
+  white-space: normal !important;
+  max-width: 240px;
+}
+.leaflet-tooltip::before {
+  display: none !important; /* Hide tooltip arrow if desired */
+}
+
+/* Fix 1: Priority Badge */
+.priority-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #ffffff;
+
+  /* Raised embossed look — not flat */
+  box-shadow:
+    0 2px 4px var(--color-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+}
+
+.priority-badge--critical { background-color: var(--color-critical); }
+.priority-badge--high     { background-color: var(--color-high);     }
+.priority-badge--medium   { background-color: var(--color-medium);   }
+.priority-badge--low      { background-color: var(--color-low);      }
+
+/* Fix 2: Map Bezel */
+.map-bezel {
+  background-color: var(--color-panel-border); /* #D4CCBB */
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow:
+    0 4px 16px var(--color-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),   /* bevel highlight top */
+    inset 0 -1px 0 rgba(80, 60, 40, 0.2);     /* bevel shadow bottom */
+  height: 100%;
+}
+
+.map-screen {
+  width: 100%;
+  height: 100%;
+  border-radius: 4px;
+  overflow: hidden;
+
+  /* The recessed inset effect — light hitting the screen edges */
+  box-shadow:
+    inset 0 4px 10px rgba(80, 60, 40, 0.22),
+    inset 0 -4px 10px rgba(80, 60, 40, 0.18),
+    inset 4px 0 10px rgba(80, 60, 40, 0.15),
+    inset -4px 0 10px rgba(80, 60, 40, 0.15);
+}
+
+/* Fix 3: Queue depth & sync readout */
+.queue-meter-housing {
+  height: 20px;
+  border-radius: 4px;
+  background: var(--color-panel-border);
+  box-shadow: inset 0 2px 5px rgba(80, 60, 40, 0.25);  /* inset trough */
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.queue-meter-fill {
+  height: 100%;
+  background: var(--color-accent-blue);   /* #7A9BB5 */
+  border-radius: 4px;
+  transition: width 800ms ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.sync-readout {
+  background: var(--color-text-primary);   /* #2E2A22 */
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin-top: 10px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--color-positive);            /* #7A9E6A — terminal green */
+  letter-spacing: 0.04em;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+/* Fix 4: Donut Legend */
+.donut-legend {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  color: var(--color-text-secondary);
+}
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.legend-count {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+/* Fix 5: Sticky Note Popup */
+.sticky-note-popup .leaflet-popup-content-wrapper {
+  background: #FFF8DC;
+  border: 1px solid var(--color-panel-border);
+  border-radius: 3px;
+  box-shadow: 3px 4px 10px var(--color-shadow);
+  transform: rotate(-1.2deg);
+  padding: 0;
+}
+
+.sticky-note-popup .leaflet-popup-tip-container {
+  display: none;   /* hide the default arrow */
+}
+
+.sticky-note-inner {
+  padding: 10px 12px;
+  min-width: 180px;
+  max-width: 240px;
+}
+
+.popup-badge {
+  font-family: var(--font-sans);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fff;
+  padding: 2px 7px;
+  border-radius: 10px;
+  display: inline-block;
+  margin-bottom: 6px;
+}
+.popup-badge--critical { background: var(--color-critical); }
+.popup-badge--high     { background: var(--color-high);     }
+.popup-badge--medium   { background: var(--color-medium);   }
+.popup-badge--low      { background: var(--color-low);      }
+
+.popup-location {
+  font-family: var(--font-serif);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0 0 4px;
+}
+
+.popup-body {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  font-style: italic;
+  margin: 0 0 6px;
+  line-height: 1.4;
+}
+
+.popup-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-inactive);
+}
