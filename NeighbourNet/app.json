@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "NeighbourNet",
+    "slug": "NeighbourNet",
+    "version": "1.0.0",
+    "android": {
+      "package": "com.anonymous.NeighbourNet"
+    },
+    "ios": {
+      "bundleIdentifier": "com.anonymous.NeighbourNet"
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-sqlite"
+    ]
+  }
+}

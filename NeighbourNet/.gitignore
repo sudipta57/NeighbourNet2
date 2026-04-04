@@ -1,0 +1,77 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# package manager caches
+.npm/
+.pnpm-store/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# Expo
+.expo/
+.expo-shared/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# logs
+*.log
+logs/
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+pnpm-debug.*
+
+# macOS
+.DS_Store
+*.pem
+
+# Linux/Windows
+Thumbs.db
+Desktop.ini
+
+# local env files
+.env*.local
+.env
+
+# Android / iOS build artifacts
+android/.gradle/
+android/local.properties
+android/app/build/
+android/build/
+ios/Pods/
+ios/build/
+
+# Python (local scripts environment)
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# typescript
+*.tsbuildinfo
+
+# testing / coverage
+coverage/
+.nyc_output/
+
+# editor
+.vscode/
+.idea/
