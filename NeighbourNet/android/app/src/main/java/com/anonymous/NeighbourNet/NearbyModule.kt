@@ -30,6 +30,11 @@ import java.util.Collections
 
 class NearbyModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
+  companion object {
+    private const val MAX_SEEN_IDS = 500
+    private const val DEFAULT_TTL = 3
+  }
+
   private val connectionsClient: ConnectionsClient = Nearby.getConnectionsClient(reactContext)
   private val connectedEndpoints = Collections.synchronizedSet(mutableSetOf<String>())
   private val endpointName = buildEndpointName(reactContext)
@@ -37,26 +42,125 @@ class NearbyModule(reactContext: ReactApplicationContext) : ReactContextBaseJava
   private val strategy = Strategy.P2P_CLUSTER
   @Volatile private var meshRunning = false
 
+  private val deviceId: String = Settings.Secure.getString(
+    reactContext.contentResolver, Settings.Secure.ANDROID_ID
+  ) ?: "unknown"
+
+  // Bounded dedup set: evicts oldest entry when full.
+  private val seenMessageIds: MutableSet<String> = Collections.synchronizedSet(
+    object : LinkedHashSet<String>() {
+      override fun add(element: String): Boolean {
+        if (size >= MAX_SEEN_IDS) remove(iterator().next())
+        return super.add(element)
+      }
+    }
+  )
+
+  private val ttl = DEFAULT_TTL
+
   private val payloadCallback = object : PayloadCallback() {
     override fun onPayloadReceived(endpointId: String, payload: Payload) {
-      val bytes = payload.asBytes()
-      if (bytes == null) {
+      val bytes = payload.asBytes() ?: return
+      val messageJson = String(bytes, Charset.forName("UTF-8"))
+      val sourceEndpointId = endpointId
+
+      // CHANGE 4: Handle ack messages before dedup flow.
+      val msgType = try {
+        org.json.JSONObject(messageJson).optString("message_type", "sos")
+      } catch (e: Exception) { "sos" }
+
+      if (msgType == "ack") {
+        val ackDest = try {
+          org.json.JSONObject(messageJson).optString("destination_id", "")
+        } catch (e: Exception) { "" }
+
+        if (ackDest == deviceId) {
+          sendEventToJS("onMessageDelivered", messageJson)
+        } else {
+          rebroadcastToAll(messageJson, sourceEndpointId)
+        }
+        return  // acks don't go through normal dedup flow
+      }
+
+      // Dedup: drop messages we have already seen.
+      val messageId = try {
+        org.json.JSONObject(messageJson).optString("message_id", "")
+      } catch (e: Exception) { "" }
+
+      if (messageId.isNotEmpty() && !seenMessageIds.add(messageId)) {
+        Log.d("NearbyMesh", "NearbyMesh: duplicate message $messageId, dropping")
         return
       }
 
-      val message = String(bytes, Charset.forName("UTF-8"))
-      Log.d("NearbyMesh", "NearbyMesh: message received from $endpointId")
-      emitEvent(
-        "onMessageReceived",
-        Arguments.createMap().apply {
-          putString("message", message)
-        }
-      )
+      Log.d("NearbyMesh", "NearbyMesh: message received from $sourceEndpointId")
+
+      // CHANGE 1: Route based on destination_id.
+      val destinationId: String? = try {
+        val obj = org.json.JSONObject(messageJson)
+        if (obj.has("destination_id") && !obj.isNull("destination_id"))
+          obj.getString("destination_id")
+        else null
+      } catch (e: Exception) { null }
+
+      if (destinationId == null) {
+        // BROADCAST message (SOS) — existing behaviour, forward to all.
+        rebroadcastToAll(messageJson, sourceEndpointId)
+        sendEventToJS("onMessageReceived", messageJson)
+
+      } else if (destinationId == deviceId) {
+        // THIS message is FOR ME — deliver to JS, do not rebroadcast.
+        sendEventToJS("onMessageReceived", messageJson)
+        sendAcknowledgement(messageJson, sourceEndpointId)
+
+      } else {
+        // Message is for SOMEONE ELSE — forward toward destination.
+        rebroadcastToAll(messageJson, sourceEndpointId)
+        // Do NOT emit to JS — this is just a relay.
+      }
     }
 
     override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {
       // No-op.
     }
+  }
+
+  // CHANGE 2: Extract rebroadcast as a private function.
+  private fun rebroadcastToAll(messageJson: String, excludeEndpointId: String) {
+    if (ttl <= 0) return
+    connectedEndpoints
+      .filter { it != excludeEndpointId }
+      .forEach { endpointId ->
+        val payload = Payload.fromBytes(messageJson.toByteArray(Charsets.UTF_8))
+        Nearby.getConnectionsClient(reactApplicationContext)
+          .sendPayload(endpointId, payload)
+      }
+  }
+
+  // CHANGE 3: Send delivery acknowledgement back toward original sender.
+  private fun sendAcknowledgement(originalJson: String, toEndpointId: String) {
+    try {
+      val obj = org.json.JSONObject(originalJson)
+      val ack = org.json.JSONObject()
+      ack.put("message_id", obj.getString("message_id"))
+      ack.put("message_type", "ack")
+      ack.put("destination_id", obj.getString("sender_id"))
+      ack.put("sender_id", deviceId)
+      val payload = Payload.fromBytes(ack.toString().toByteArray(Charsets.UTF_8))
+      Nearby.getConnectionsClient(reactApplicationContext)
+        .sendPayload(toEndpointId, payload)
+    } catch (e: Exception) {
+      Log.e("NearbyMesh", "Failed to send ack: ${e.message}")
+    }
+  }
+
+  // CHANGE 5: Unified JS event emitter — wraps messageJson in { message: ... }.
+  private fun sendEventToJS(eventName: String, messageJson: String) {
+    emitEvent(
+      eventName,
+      Arguments.createMap().apply {
+        putString("message", messageJson)
+      }
+    )
   }
 
   private val connectionLifecycleCallback = object : ConnectionLifecycleCallback() {
