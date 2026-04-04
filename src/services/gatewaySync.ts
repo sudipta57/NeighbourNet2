@@ -18,6 +18,7 @@ const HARD_CODED_GATEWAY_ID = 'neighbournet-mobile-gateway';
 
 type BatchResponse = {
 	persisted_ids: string[];
+	duplicate_ids?: string[];
 	failed_ids?: string[];
 };
 
@@ -110,7 +111,9 @@ const parseResponseBody = async (response: Response): Promise<string> => {
 };
 
 const parsePersistedIds = (body: BatchResponse): string[] => {
-	return Array.isArray(body.persisted_ids) ? body.persisted_ids : [];
+	const persisted = Array.isArray(body.persisted_ids) ? body.persisted_ids : [];
+	const duplicates = Array.isArray(body.duplicate_ids) ? body.duplicate_ids : [];
+	return [...persisted, ...duplicates];
 };
 
 const applyPersistedIds = (persistedIds: string[]): void => {
@@ -177,6 +180,7 @@ const postChunk = async (messages: Message[]): Promise<string[]> => {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
+					'ngrok-skip-browser-warning': 'true',
 				},
 				body: payload,
 			});

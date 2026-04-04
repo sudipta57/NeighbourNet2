@@ -9,6 +9,7 @@ import {
 	isSeenMessage,
 } from '../db/database'
 import { getConnectedPeerCount, scanNearbyPeers } from '../services/meshService'
+import { startMesh } from '../services/meshService'
 
 type GatewayStatus = 'idle' | 'syncing' | 'success' | 'error'
 
@@ -75,6 +76,11 @@ const useAppStore = create<AppState>()((set, get) => ({
 
 	triggerPeerScan: async () => {
 		try {
+			if (!get().isMeshActive) {
+				await startMesh()
+				set({ isMeshActive: true })
+			}
+
 			const count = await scanNearbyPeers()
 			set({ peerCount: count })
 			return count

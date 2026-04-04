@@ -309,12 +309,16 @@ const MeshStatusScreen = () => {
 				</View>
 
 				<TouchableOpacity
-					style={[styles.scanButton, (!isMeshActive || isScanningPeers) && styles.scanButtonDisabled]}
+					style={[styles.scanButton, isScanningPeers && styles.scanButtonDisabled]}
 					onPress={handleScanPeers}
-					disabled={!isMeshActive || isScanningPeers}
+					disabled={isScanningPeers}
 				>
 					<Text style={styles.scanButtonText}>
-						{isScanningPeers ? 'Scanning nearby devices...' : 'Scan Nearby Devices'}
+						{isScanningPeers
+							? 'Scanning nearby devices...'
+							: isMeshActive
+								? 'Scan Nearby Devices'
+								: 'Start Mesh & Scan Devices'}
 					</Text>
 				</TouchableOpacity>
 

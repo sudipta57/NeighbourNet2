@@ -91,8 +91,35 @@ class NearbyModule(reactContext: ReactApplicationContext) : ReactContextBaseJava
   private val discoveryCallback = object : EndpointDiscoveryCallback() {
     override fun onEndpointFound(endpointId: String, discoveryInfo: DiscoveredEndpointInfo) {
       Log.i("NearbyMesh", "NearbyMesh: endpoint found: $endpointId")
+
+      // Prevent both devices from racing requestConnection at once.
+      val remoteEndpointName = discoveryInfo.endpointName
+      val shouldInitiate = endpointName <= remoteEndpointName
+      if (!shouldInitiate) {
+        Log.i("NearbyMesh", "NearbyMesh: waiting for remote initiator $remoteEndpointName")
+        return
+      }
+
       Log.i("NearbyMesh", "NearbyMesh: requesting connection to $endpointId")
-      connectionsClient.requestConnection(endpointName, endpointId, connectionLifecycleCallback)
+      connectionsClient
+        .requestConnection(endpointName, endpointId, connectionLifecycleCallback)
+        .addOnFailureListener { error ->
+          val apiException = error as? ApiException
+          val statusCode = apiException?.statusCode
+          Log.w("NearbyMesh", "NearbyMesh: requestConnection failed for $endpointId with status=$statusCode", error)
+
+          if (statusCode == ConnectionsStatusCodes.STATUS_RADIO_ERROR) {
+            Log.w("NearbyMesh", "NearbyMesh: radio error during requestConnection, will retry on next scan")
+          }
+
+          if (statusCode == ConnectionsStatusCodes.STATUS_ALREADY_CONNECTED_TO_ENDPOINT) {
+            val peerCount = synchronized(connectedEndpoints) {
+              connectedEndpoints.add(endpointId)
+              connectedEndpoints.size
+            }
+            emitPeerEvent("onPeerConnected", endpointId, peerCount)
+          }
+        }
     }
 
     override fun onEndpointLost(endpointId: String) {
@@ -127,15 +154,7 @@ class NearbyModule(reactContext: ReactApplicationContext) : ReactContextBaseJava
       }
   }
 
-  @ReactMethod
-  fun startMesh(promise: Promise) {
-    if (meshRunning) {
-      scanNow(promise)
-      return
-    }
-
-    connectionsClient.stopAllEndpoints()
-
+  private fun startAdvertisingThenDiscovery(promise: Promise?) {
     connectionsClient
       .startAdvertising(
         endpointName,
@@ -154,13 +173,29 @@ class NearbyModule(reactContext: ReactApplicationContext) : ReactContextBaseJava
           startDiscovery(promise)
           return@addOnFailureListener
         }
+
         Log.e("NearbyMesh", "NearbyMesh: advertising failed", error)
-        promise.reject("ADVERTISING_FAILED", error)
+        promise?.reject("ADVERTISING_FAILED", error)
       }
   }
 
   @ReactMethod
+  fun startMesh(promise: Promise) {
+    Log.i("NearbyMesh", "NearbyMesh: startMesh invoked")
+
+    if (meshRunning) {
+      scanNow(promise)
+      return
+    }
+
+    connectionsClient.stopAllEndpoints()
+    startAdvertisingThenDiscovery(promise)
+  }
+
+  @ReactMethod
   fun scanNow(promise: Promise) {
+    Log.i("NearbyMesh", "NearbyMesh: scanNow invoked")
+
     if (!meshRunning) {
       startMesh(promise)
       return
@@ -168,7 +203,7 @@ class NearbyModule(reactContext: ReactApplicationContext) : ReactContextBaseJava
 
     connectionsClient.stopDiscovery()
     Log.i("NearbyMesh", "NearbyMesh: scanNow invoked, restarting discovery")
-    startDiscovery(promise)
+    startAdvertisingThenDiscovery(promise)
   }
 
   @ReactMethod

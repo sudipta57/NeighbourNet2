@@ -21,13 +21,24 @@ const isAlreadyDiscoveringError = (error: unknown): boolean => {
   return message.includes('STATUS_ALREADY_DISCOVERING')
 }
 
+const MESH_CALL_TIMEOUT_MS = 8000
+
+const withTimeout = async <T>(label: string, operation: Promise<T>, timeoutMs = MESH_CALL_TIMEOUT_MS): Promise<T> => {
+  return Promise.race([
+    operation,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs)
+    }),
+  ])
+}
+
 export async function startMesh(): Promise<void> {
   if (!NearbyMesh) {
     console.warn(`NearbyMesh: native module not available on ${Platform.OS}, skipping mesh start`)
     return
   }
 
-  await NearbyMesh.startMesh()
+  await withTimeout('startMesh', NearbyMesh.startMesh())
 }
 
 export async function stopMesh(): Promise<void> {
@@ -64,7 +75,7 @@ export async function scanNearbyPeers(): Promise<number> {
   }
 
   try {
-    await NearbyMesh.scanNow()
+    await withTimeout('scanNow', NearbyMesh.scanNow())
   } catch (error) {
     // Nearby can report "already discovering" during rapid rescan calls.
     if (!isAlreadyDiscoveringError(error)) {

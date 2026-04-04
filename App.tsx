@@ -33,28 +33,35 @@ const App = () => {
       const apiLevel = Number(Platform.Version)
 
       if (apiLevel >= 31) {
-        const permissions = [
+        const requiredPermissions = [
           PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
           PermissionsAndroid.PERMISSIONS.BLUETOOTH_ADVERTISE,
           PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
         ]
 
-        if (apiLevel >= 33) {
-          permissions.push(PermissionsAndroid.PERMISSIONS.NEARBY_WIFI_DEVICES)
-        }
+        const requiredResults = await PermissionsAndroid.requestMultiple(requiredPermissions)
 
-        const results = await PermissionsAndroid.requestMultiple(permissions)
-
-        const allGranted = Object.values(results).every(
+        const requiredGranted = Object.values(requiredResults).every(
           (result) => result === PermissionsAndroid.RESULTS.GRANTED
         )
 
-        if (!allGranted) {
-          console.warn('[Permissions] Some permissions denied:', results)
+        if (!requiredGranted) {
+          console.warn('[Permissions] Required mesh permissions denied:', requiredResults)
+          return false
         }
 
-        return allGranted
+        // Optional for Nearby Connections in this app, but useful for certain transports on newer Android.
+        if (apiLevel >= 33) {
+          const optionalResults = await PermissionsAndroid.requestMultiple([
+            PermissionsAndroid.PERMISSIONS.NEARBY_WIFI_DEVICES,
+          ])
+
+          if (optionalResults[PermissionsAndroid.PERMISSIONS.NEARBY_WIFI_DEVICES] !== PermissionsAndroid.RESULTS.GRANTED) {
+            console.warn('[Permissions] Optional NEARBY_WIFI_DEVICES denied:', optionalResults)
+          }
+        }
+
+        return true
       } else {
         const results = await PermissionsAndroid.requestMultiple([
           PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
