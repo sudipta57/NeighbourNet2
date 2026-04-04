@@ -57,3 +57,14 @@ export interface AcknowledgeResponse {
   acknowledged: boolean;
   acknowledged_at: string;
 }
+
+export interface MeshTelemetry {
+  device_id: string;
+  mascot: string;
+  role: 'gateway' | 'relay' | 'offline';
+  peer_ids: string[];
+  hop_count: number;
+  last_seen: string;
+  conn_type: 'bluetooth' | 'wifi_direct' | 'both';
+  is_origin: boolean;
+}
