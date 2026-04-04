@@ -18,6 +18,7 @@ import { v4 as uuidv4 } from 'uuid'
 import useAppStore from '../store/useAppStore'
 import { broadcastMessage } from '../services/meshService'
 import { triggerManualSync } from '../services/gatewaySync'
+import { enqueuePendingMeshForward } from '../services/meshRelay'
 import { triageMessage } from '../services/triageEngine'
 import { SOS_TEMPLATES } from '../types/message'
 import {
@@ -132,11 +133,13 @@ const SosScreen = () => {
 			})
 
 			try {
-				void broadcastMessage(message).catch((error) => {
-					console.error('Failed to broadcast SOS over mesh:', error)
-				})
+				const recipients = await broadcastMessage(message)
+				if (recipients <= 0) {
+					await enqueuePendingMeshForward(message.message_id)
+				}
 			} catch (error) {
-				console.error('Failed to queue mesh broadcast:', error)
+				console.error('Failed to broadcast SOS over mesh:', error)
+				await enqueuePendingMeshForward(message.message_id)
 			}
 
 			setLastResult({ tier, score: priority_score })
