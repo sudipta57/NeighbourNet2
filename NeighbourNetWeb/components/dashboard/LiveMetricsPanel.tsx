@@ -52,8 +52,8 @@ export default function LiveMetricsPanel({ messages }: Props) {
 
   return (
     <div className="skeu-panel flex-1 flex flex-col p-4 w-full h-full">
-      <h2 style={{ fontFamily: 'var(--font-serif)', fontVariant: 'small-caps', fontSize: '16px', fontWeight: 'bold', color: 'var(--color-text-primary)', marginBottom: '16px' }}>
-        📊 Live Metrics
+      <h2 style={{ fontFamily: 'var(--font-sans)', fontSize: '16px', fontWeight: 'bold', color: 'var(--color-text-primary)', marginBottom: '16px' }}>
+        📊 Operation Metrics
       </h2>
 
       <div className="flex flex-row justify-between mb-4">

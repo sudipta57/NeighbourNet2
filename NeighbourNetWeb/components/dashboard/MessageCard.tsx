@@ -136,17 +136,17 @@ export default function MessageCard({ message, onDispatch, isSelected, onClick }
           <div className="flex items-center justify-end">
             {acknowledged ? (
               <span style={{ fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: '12px', color: 'var(--color-positive)' }}>
-                Dispatched ✓
+                Assigned ✓
               </span>
             ) : (
               <button 
                 onClick={handleDispatch}
                 disabled={dispatching}
-                className="skeu-button px-3 py-1"
+                className="skeu-button px-3 py-1 primary"
                 style={{ fontSize: '12px', height: 'auto', minHeight: '28px', opacity: dispatching ? 0.7 : 1 }}
               >
-                <span style={{ fontFamily: 'var(--font-sans)', fontVariant: 'small-caps', fontWeight: 600 }}>
-                  {dispatching ? 'Dispatching…' : '✓ Dispatch'}
+                <span style={{ fontFamily: 'var(--font-sans)', fontWeight: 600 }}>
+                  {dispatching ? 'Assigning…' : '✓ Assign'}
                 </span>
               </button>
             )}
