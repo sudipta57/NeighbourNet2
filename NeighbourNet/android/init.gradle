@@ -1,0 +1,58 @@
+/**
+ * Gradle init script to fix React Native module variant resolution for AGP 8.x
+ *
+ * This script ensures that React Native library modules properly export
+ * consumable variants that AGP 8.11.0 requires.
+ *
+ * Usage: gradle --init-script android/init.gradle :app:assembleDebug
+ * Or set: gradle.properties org.gradle.initialization.include=android/init.gradle
+ */
+
+rootProject {
+    // fix React Native module variants from node_modules
+    subprojects { project ->
+        // List of modules that need variant fixing
+        def modulesToFix = [
+            'react-native-async-storage_async-storage',
+            'react-native-community_netinfo',
+            'react-native-get-random-values',
+            'react-native-safe-area-context'
+        ]
+        
+        // Check if this module needs fixing by checking the project name
+        def projectName = project.name
+        def needsFix = modulesToFix.any { moduleName ->
+            projectName.contains(moduleName.replace('_', '-'))
+        }
+        
+        if (needsFix && project.plugins.hasPlugin('com.android.library')) {
+            project.afterEvaluate {
+                logger.info("Applying variant fix to: ${project.name}")
+                
+                // Fix: Ensure library variants are properly exported
+                if (project.android != null && project.android.libraryVariants != null) {
+                    try {
+                        // Explicitly declare library variants as components
+                        def variants = project.android.libraryVariants.collect { it.name }
+                        logger.info("  Found variants: ${variants}")
+                        
+                        // The key is to ensure components are accessible
+                        project.configurations.all { cfg ->
+                            // This triggers variant creation if not already done
+                            cfg.attributes {
+                                // Standard attributes for library modules
+                                attribute(com.android.build.api.attributes.BuildTypeAttr.ATTRIBUTE,
+                                    cfg.name.contains('Debug') || cfg.name.contains('debug') ?
+                                    project.objects.named(com.android.build.api.attributes.BuildTypeAttr, 'debug') :
+                                    project.objects.named(com.android.build.api.attributes.BuildTypeAttr, 'release')
+                                )
+                            }
+                        }
+                    } catch (Throwable e) {
+                        logger.warn("Could not fix variants for ${project.name}: ${e.message}")
+                    }
+                }
+            }
+        }
+    }
+}

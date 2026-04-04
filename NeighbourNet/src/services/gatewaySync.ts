@@ -155,19 +155,6 @@ const setOnlineState = (state: NetInfoState): void => {
 	useAppStore.getState().setOnline(online);
 };
 
-const setLastSyncTime = (timestamp: number): void => {
-	const store = useAppStore.getState();
-
-	if (typeof store.setLastSyncTime === 'function') {
-		store.setLastSyncTime(timestamp);
-		return;
-	}
-
-	if (typeof store.setLastSyncAt === 'function') {
-		store.setLastSyncAt(new Date(timestamp).toISOString());
-	}
-};
-
 const postChunk = async (messages: Message[]): Promise<string[]> => {
 	const payloadMessages = messages.map(toSyncMessage);
 	const payload = JSON.stringify({
@@ -205,9 +192,9 @@ const postChunk = async (messages: Message[]): Promise<string[]> => {
 			return parsePersistedIds(json);
 		} catch (error) {
 			lastError = error;
-			if (error instanceof SyncRequestError && !error.retryable) {
-				throw error;
-			}
+			// Always try remaining fallback URLs even on non-retryable errors,
+			// because a 4xx from the primary URL (e.g. expired ngrok tunnel)
+			// does not mean fallback servers will also reject the request.
 		}
 	}
 
