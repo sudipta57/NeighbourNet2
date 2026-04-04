@@ -321,3 +321,4 @@ Fix the backend to accept LAN connections — stop the current uvicorn (Ctrl+C) 
 uvicorn main:app --reload --port 8000 --host 0.0.0.0
 
 <!-- ngrok config add-authtoken 3BsxdJuldrTkWCH5LOrdHdC2kZT_23QQi8zwE7KFvitrcSGnk -->
+ngrok http 5000
