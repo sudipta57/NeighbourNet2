@@ -39,6 +39,9 @@ class SyncRequestError extends Error {
 
 let netInfoUnsubscribe: NetInfoSubscription | null = null;
 let isSyncing = false;
+let periodicSyncTimer: ReturnType<typeof setInterval> | null = null;
+
+const PERIODIC_SYNC_INTERVAL_MS = 15_000;
 
 const withNoTrailingSlash = (value: string): string => value.replace(/\/+$/, '');
 
@@ -318,6 +321,12 @@ export const startGatewaySync = (): void => {
 		}
 	});
 
+	if (!periodicSyncTimer) {
+		periodicSyncTimer = setInterval(() => {
+			void triggerManualSync();
+		}, PERIODIC_SYNC_INTERVAL_MS);
+	}
+
 	void triggerManualSync();
 };
 
@@ -325,5 +334,10 @@ export const stopGatewaySync = (): void => {
 	if (netInfoUnsubscribe) {
 		netInfoUnsubscribe();
 		netInfoUnsubscribe = null;
+	}
+
+	if (periodicSyncTimer) {
+		clearInterval(periodicSyncTimer);
+		periodicSyncTimer = null;
 	}
 };

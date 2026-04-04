@@ -11,6 +11,7 @@ import { isOnboardingComplete, markOnboardingComplete } from './src/services/app
 import { startGatewaySync, stopGatewaySync } from './src/services/gatewaySync'
 import { onMessageReceived, onPeerConnected, onPeerDisconnected, startMesh, stopMesh } from './src/services/meshService'
 import { initDatabase } from './src/db/database'
+import { flushPendingMeshForwards } from './src/services/meshRelay'
 import useAppStore from './src/store/useAppStore'
 
 const PEER_REFRESH_INTERVAL_MS = 15000
@@ -127,9 +128,33 @@ const App = () => {
     let unsubDisconnected: (() => void) | null = null
     let netInfoUnsubscribe: (() => void) | null = null
     let peerRefreshTimer: ReturnType<typeof setInterval> | null = null
+    let isFlushingPendingMeshForwards = false
 
     const init = async () => {
       try {
+        const flushPendingMeshQueue = async (): Promise<void> => {
+          if (isFlushingPendingMeshForwards) {
+            return
+          }
+
+          if (useAppStore.getState().peerCount <= 0) {
+            return
+          }
+
+          isFlushingPendingMeshForwards = true
+
+          try {
+            const result = await flushPendingMeshForwards()
+            if (result.attempted > 0) {
+              console.log(
+                `[MeshRelay] Pending forwarded ${result.forwarded}/${result.attempted} message(s)`
+              )
+            }
+          } finally {
+            isFlushingPendingMeshForwards = false
+          }
+        }
+
         startGatewaySync()
 
         netInfoUnsubscribe = NetInfo.addEventListener((state) => {
@@ -152,10 +177,18 @@ const App = () => {
 
         await startMesh()
         useAppStore.getState().setMeshActive(true)
-        await useAppStore.getState().triggerPeerScan()
+        const initialPeerCount = await useAppStore.getState().triggerPeerScan()
+        if (initialPeerCount > 0) {
+          void flushPendingMeshQueue()
+        }
 
         peerRefreshTimer = setInterval(() => {
-          void useAppStore.getState().refreshPeerCount()
+          void (async () => {
+            const peerCount = await useAppStore.getState().refreshPeerCount()
+            if (peerCount > 0) {
+              await flushPendingMeshQueue()
+            }
+          })()
         }, PEER_REFRESH_INTERVAL_MS)
 
         unsubMessage = onMessageReceived(async (message) => {
@@ -164,6 +197,9 @@ const App = () => {
 
         unsubConnected = onPeerConnected(({ peerCount }) => {
           useAppStore.getState().setPeerCount(peerCount)
+          if (peerCount > 0) {
+            void flushPendingMeshQueue()
+          }
         })
 
         unsubDisconnected = onPeerDisconnected(({ peerCount }) => {
