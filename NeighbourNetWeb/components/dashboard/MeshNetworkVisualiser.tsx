@@ -126,17 +126,21 @@ export default function MeshNetworkVisualiser({
         context.moveTo(s.x, s.y);
         context.lineTo(t.x, t.y);
         
-        context.strokeStyle = isGatewayEdge ? '#2563eb' : '#0d9488'; // tailwind blue-600 / teal-600
-        context.lineWidth = (isGatewayEdge ? 1.5 : 1) * (isHoveredEdge ? 2.5 : 1);
-        context.globalAlpha = 0.4;
+        context.strokeStyle = isGatewayEdge ? '#60a5fa' : '#34d399'; // neon blue / emerald
+        context.lineWidth = (isGatewayEdge ? 2 : 1) * (isHoveredEdge ? 2.5 : 1);
+        context.globalAlpha = isHoveredEdge ? 0.8 : 0.4;
         
         if (!isGatewayEdge) {
           context.setLineDash([4, 4]);
         } else {
           context.setLineDash([]);
+          // Add glow to gateway edges
+          context.shadowColor = '#3b82f6';
+          context.shadowBlur = 8;
         }
         
         context.stroke();
+        context.shadowBlur = 0; // reset shadow
         
         // Packet animation on gateway links
         if (isGatewayEdge) {
@@ -144,10 +148,13 @@ export default function MeshNetworkVisualiser({
           const dx = t.x - s.x;
           const dy = t.y - s.y;
           context.beginPath();
-          context.arc(s.x + dx * timePhase, s.y + dy * timePhase, 3, 0, 2 * Math.PI);
-          context.fillStyle = '#2563eb';
+          context.arc(s.x + dx * timePhase, s.y + dy * timePhase, 3.5, 0, 2 * Math.PI);
+          context.fillStyle = '#bfdbfe';
+          context.shadowColor = '#bfdbfe';
+          context.shadowBlur = 10;
           context.globalAlpha = 1.0;
           context.fill();
+          context.shadowBlur = 0;
         }
       });
       context.setLineDash([]);
@@ -163,11 +170,14 @@ export default function MeshNetworkVisualiser({
           const pulseR = 18 + Math.sin(now / 200) * 4;
           context.beginPath();
           context.arc(n.x, n.y, pulseR, 0, 2 * Math.PI);
-          context.strokeStyle = '#dc2626';
+          context.strokeStyle = '#ef4444'; // Neon red
           context.lineWidth = 2;
-          context.globalAlpha = 0.6;
+          context.globalAlpha = 0.7;
+          context.shadowColor = '#ef4444';
+          context.shadowBlur = 15;
           context.stroke();
           context.globalAlpha = 1.0;
+          context.shadowBlur = 0;
         }
 
         // Gateway pulse
@@ -175,7 +185,7 @@ export default function MeshNetworkVisualiser({
           const pulseR = 16 + Math.sin(now / 300) * 6;
           context.beginPath();
           context.arc(n.x, n.y, pulseR, 0, 2 * Math.PI);
-          context.strokeStyle = 'rgba(37, 99, 235, 0.4)';
+          context.strokeStyle = 'rgba(96, 165, 250, 0.4)'; // neon blue
           context.lineWidth = 3;
           context.stroke();
         }
@@ -186,19 +196,22 @@ export default function MeshNetworkVisualiser({
         context.arc(n.x, n.y, radius, 0, 2 * Math.PI);
         
         if (n.role === 'offline') {
-          context.strokeStyle = '#94a3b8'; // slate-400
+          context.strokeStyle = '#475569'; // slate-600
           context.lineWidth = 2;
           context.setLineDash([3, 3]);
           context.stroke();
           context.setLineDash([]);
-          context.fillStyle = '#f8fafc';
+          context.fillStyle = '#0f172a'; // slate-950
           context.fill();
         } else {
-          context.fillStyle = n.role === 'gateway' ? '#2563eb' : '#0d9488';
+          context.fillStyle = n.role === 'gateway' ? '#1e3a8a' : '#064e3b'; // dark blue / dark emerald back
+          context.shadowColor = n.role === 'gateway' ? '#3b82f6' : '#10b981';
+          context.shadowBlur = 12;
           context.fill();
-          context.strokeStyle = '#ffffff';
-          context.lineWidth = 1.5;
+          context.strokeStyle = n.role === 'gateway' ? '#60a5fa' : '#34d399';
+          context.lineWidth = 2;
           context.stroke();
+          context.shadowBlur = 0;
         }
 
         // Mascot
@@ -212,8 +225,8 @@ export default function MeshNetworkVisualiser({
         // GW Label
         if (n.role === 'gateway') {
           context.font = '10px sans-serif';
-          context.fillStyle = '#0f172a';
-          context.fillText('GW', n.x, n.y + radius + 10);
+          context.fillStyle = '#93c5fd'; // blue-300
+          context.fillText('GW', n.x, n.y + radius + 12);
         }
       });
 
@@ -432,60 +445,60 @@ export default function MeshNetworkVisualiser({
   };
 
   return (
-    <div className="w-full flex-col flex bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm" ref={containerRef}>
+    <div className="w-full flex-col flex bg-slate-900/40 backdrop-blur-3xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/5" ref={containerRef}>
       
       {/* Stat Bar Header */}
-      <div className="flex border-b border-slate-200 bg-slate-50 p-4 items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-6">
+      <div className="flex border-b border-white/5 bg-slate-900/60 p-4 lg:px-6 items-center justify-between flex-wrap gap-4 relative z-10">
+        <div className="flex items-center gap-6 lg:gap-10">
           <div className="flex flex-col">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Active Nodes</span>
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Active Nodes</span>
             <div className="flex items-center gap-2">
-              <span className="text-xl font-bold text-slate-900">{stats.active}</span>
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+              <span className="text-2xl font-bold text-white drop-shadow-sm">{stats.active}</span>
+              <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.8)] animate-pulse"></div>
             </div>
           </div>
           <div className="flex flex-col">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Edges</span>
-            <span className="text-xl font-bold text-slate-900">{stats.edges}</span>
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Total Edges</span>
+            <span className="text-2xl font-bold text-white drop-shadow-sm">{stats.edges}</span>
           </div>
           <div className="flex flex-col">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Gateways</span>
-            <span className="text-xl font-bold text-blue-600">{stats.gateways}</span>
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Gateways</span>
+            <span className="text-2xl font-bold text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.6)]">{stats.gateways}</span>
           </div>
           <div className="flex flex-col">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Avg Hops</span>
-            <span className="text-xl font-bold text-slate-900">{stats.avgHop}</span>
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Avg Hops</span>
+            <span className="text-2xl font-bold text-white drop-shadow-sm">{stats.avgHop}</span>
           </div>
         </div>
         
-        <div className="flex gap-2">
-          <div className="text-xs text-slate-500 flex items-center pr-4">
+        <div className="flex gap-3">
+          <div className="text-xs text-indigo-200/70 flex items-center pr-4 font-medium">
             Updated {lastUpdate.toLocaleTimeString()}
           </div>
           <select 
             value={filterMode} 
             onChange={(e) => setFilterMode(e.target.value as any)}
-            className="text-sm bg-white border border-slate-200 rounded-md px-2 py-1 outline-none text-slate-700 font-medium"
+            className="text-sm bg-slate-800/80 border border-slate-700 rounded-md px-3 py-1 outline-none text-slate-200 font-medium hover:bg-slate-700 transition focus:ring-2 focus:ring-indigo-500/50"
           >
             <option value="all">All Nodes</option>
             <option value="gateway">Gateways Only</option>
             <option value="active">Active Only</option>
           </select>
-          <button onClick={handleFitScreen} className="p-1 px-3 border border-slate-200 rounded-md bg-white hover:bg-slate-100 flex items-center gap-2 text-sm text-slate-700 font-medium transition-colors">
-            <Maximize size={16} /> Fit
+          <button onClick={handleFitScreen} className="p-1.5 px-3 border border-white/10 rounded-md bg-white/5 hover:bg-white/10 flex items-center gap-2 text-sm text-slate-200 font-medium transition-all backdrop-blur-sm">
+            <Maximize size={16} className="text-blue-400" /> Fit
           </button>
-          <button onClick={handleExportPNG} className="p-1 px-3 border border-slate-200 rounded-md bg-white hover:bg-slate-100 flex items-center gap-2 text-sm text-slate-700 font-medium transition-colors">
-            <Download size={16} /> PNG 
+          <button onClick={handleExportPNG} className="p-1.5 px-3 border border-white/10 rounded-md bg-white/5 hover:bg-white/10 flex items-center gap-2 text-sm text-slate-200 font-medium transition-all backdrop-blur-sm">
+            <Download size={16} className="text-emerald-400" /> PNG 
           </button>
         </div>
       </div>
 
       {/* Canvas Area */}
-      <div className="w-full relative" style={{ height: `${height}px`, backgroundColor: '#f8fafc' }}>
+      <div className="w-full relative" style={{ height: `${height}px`, background: 'transparent' }}>
         
         {mockMode && (
-          <div className="absolute top-4 right-4 bg-amber-100 text-amber-800 px-3 py-1 text-xs font-bold rounded-lg border border-amber-200 uppercase tracking-wide opacity-80 z-10 shadow-sm flex items-center gap-2 pointer-events-none">
-            <Activity size={14} /> Simulation Mode
+          <div className="absolute top-4 right-4 bg-amber-900/30 text-amber-300 px-3 py-1.5 text-xs font-bold rounded-lg border border-amber-500/30 uppercase tracking-widest backdrop-blur-md z-10 shadow-lg flex items-center gap-2 pointer-events-none">
+            <Activity size={14} className="animate-pulse" /> Simulation Mode
           </div>
         )}
 
@@ -497,39 +510,39 @@ export default function MeshNetworkVisualiser({
         {/* Hover Tooltip Overlay */}
         {hoveredNode && (
           <div 
-            className="absolute z-20 bg-white border border-slate-200 shadow-xl rounded-lg p-3 pointer-events-none transform -translate-x-1/2 mt-3"
+            className="absolute z-20 bg-slate-900/80 backdrop-blur-xl border border-white/10 shadow-[0_4px_30px_rgba(0,0,0,0.5)] rounded-xl p-3 pointer-events-none transform -translate-x-1/2 mt-3 text-white transition-all duration-100 ease-out"
             style={{ left: Math.max(80, Math.min(tooltipPos.x, canvasRef.current?.offsetWidth! - 80)), top: tooltipPos.y }}
           >
-            <div className="flex items-center gap-2 mb-2 border-b border-slate-100 pb-2">
-              <span className="text-xl">{hoveredNode.mascot}</span>
+            <div className="flex items-center gap-2 mb-2 border-b border-slate-700 pb-2">
+              <span className="text-2xl drop-shadow-lg">{hoveredNode.mascot}</span>
               <div>
-                <div className="font-mono text-xs font-bold text-slate-800">{hoveredNode.device_id.slice(0, 8)}…</div>
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{hoveredNode.role}</div>
+                <div className="font-mono text-xs font-bold text-slate-200">{hoveredNode.device_id.slice(0, 8)}…</div>
+                <div className={`text-[10px] font-bold uppercase tracking-widest ${hoveredNode.role === 'gateway' ? 'text-blue-400' : 'text-emerald-400'}`}>{hoveredNode.role}</div>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
-              <div className="text-slate-500">Peers</div>
-              <div className="font-semibold text-slate-800 text-right">{hoveredNode.peer_ids?.length || 0}</div>
+              <div className="text-slate-400">Peers</div>
+              <div className="font-semibold text-slate-100 text-right">{hoveredNode.peer_ids?.length || 0}</div>
               
-              <div className="text-slate-500">Hops</div>
-              <div className="font-semibold text-slate-800 text-right">{hoveredNode.hop_count}</div>
+              <div className="text-slate-400">Hops</div>
+              <div className="font-semibold text-slate-100 text-right">{hoveredNode.hop_count}</div>
               
-              <div className="text-slate-500">Conn</div>
-              <div className="font-semibold text-slate-800 text-right">{hoveredNode.conn_type?.replace('_', ' ')}</div>
+              <div className="text-slate-400">Conn</div>
+              <div className="font-semibold text-slate-100 text-right">{hoveredNode.conn_type?.replace('_', ' ')}</div>
             </div>
           </div>
         )}
 
         {/* Legend */}
-        <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur border border-slate-200 shadow-sm rounded-lg p-2 px-3 flex gap-4 text-xs font-medium text-slate-600 z-10">
-          <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-blue-600"></div> Gateway
+        <div className="absolute bottom-6 left-6 bg-slate-900/70 backdrop-blur-md border border-white/10 shadow-xl rounded-xl p-2.5 px-4 flex gap-5 text-[11px] font-bold tracking-wider uppercase text-slate-300 z-10">
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]"></div> Gateway
           </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-teal-600"></div> Relay
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div> Relay
           </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 rounded-full h-0 border-t-2 border-slate-400 border-dashed"></div> Offline
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 rounded-full h-0 border-t-2 border-slate-500 border-dashed"></div> Offline
           </div>
         </div>
       </div>
