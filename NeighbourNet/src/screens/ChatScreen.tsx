@@ -26,6 +26,8 @@ import {
   sendMessage,
 } from '../services/meshService'
 import useAppStore from '../store/useAppStore'
+import LocationShareButton from '../components/LocationShareButton'
+import LocationMapCard from '../components/LocationMapCard'
 
 interface ChatScreenProps {
   onBack: () => void
@@ -93,6 +95,68 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
       flatListRef.current?.scrollToEnd({ animated: true })
     }, 50)
   }, [messages.length])
+
+  const handleLocationShare = useCallback(async (lat: number, lng: number, label: string) => {
+    if (!myDeviceId || !friend) return
+
+    const threadKey = `thread_${friend.friend_code}`
+    let threadId = await AsyncStorage.getItem(threadKey)
+    if (!threadId) {
+      threadId = uuidv4()
+      await AsyncStorage.setItem(threadKey, threadId)
+    }
+
+    const storeKey = friend.device_uuid || friend.friend_code
+    const myCode = await getMyFriendCode()
+    const nowIso = new Date().toISOString()
+
+    const chatMsg: ChatMessage = {
+      id: uuidv4(),
+      thread_id: threadId,
+      friend_device_uuid: storeKey,
+      body: `📍 Location: ${label}`,
+      sender_id: myDeviceId,
+      is_outgoing: true,
+      created_at: Date.now(),
+      delivered: false,
+      shared_lat: lat,
+      shared_lng: lng,
+      shared_location_label: label,
+    }
+
+    saveChatMessage(chatMsg)
+    useAppStore.getState().addChatMessage(storeKey, chatMsg)
+
+    const meshMessage: Message = {
+      message_id: chatMsg.id,
+      body: chatMsg.body,
+      sender_id: myDeviceId,
+      sender_name: myDisplayName,
+      destination_id: friend.device_uuid || undefined,
+      location_hint: myCode,
+      chat_thread_id: threadId,
+      message_type: 'gps_share',
+      shared_lat: lat,
+      shared_lng: lng,
+      shared_location_label: label,
+      priority_tier: 'LOW',
+      priority_score: 0,
+      ttl: 10,
+      hop_count: 0,
+      created_at: nowIso,
+      last_hop_at: nowIso,
+      synced: false,
+      gps_lat: lat,
+      gps_lng: lng,
+    }
+
+    try {
+      await sendMessage(meshMessage)
+    } catch (e) {
+      console.error('[Chat] sendMessage (location) failed:', e)
+    }
+    console.log('[Chat] Location shared:', lat, lng)
+  }, [myDeviceId, myDisplayName, friend])
 
   const handleSend = useCallback(async () => {
     const body = inputText.trim()
@@ -167,19 +231,25 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
     Date.now() - friend.last_seen_at < 5 * 60 * 1000
 
   const renderMessage = ({ item }: { item: ChatMessage }) => {
+    const isLocationShare = item.shared_lat != null && item.shared_lng != null
+
     if (item.is_outgoing) {
       return (
         <View style={styles.rowRight}>
-          <View style={styles.bubbleOut}>
-            <Text style={styles.bubbleTextOut}>{item.body}</Text>
+          <View style={[styles.bubbleOut, isLocationShare && styles.bubbleMap]}>
+            {isLocationShare ? (
+              <LocationMapCard
+                latitude={item.shared_lat!}
+                longitude={item.shared_lng!}
+                label={item.shared_location_label ?? `${item.shared_lat}, ${item.shared_lng}`}
+                isOutgoing={true}
+              />
+            ) : (
+              <Text style={styles.bubbleTextOut}>{item.body}</Text>
+            )}
             <View style={styles.metaRow}>
               <Text style={styles.timeOut}>{formatTime(item.created_at)}</Text>
-              <Text
-                style={[
-                  styles.tick,
-                  item.delivered ? styles.tickDelivered : styles.tickPending,
-                ]}
-              >
+              <Text style={[styles.tick, item.delivered ? styles.tickDelivered : styles.tickPending]}>
                 {item.delivered ? '✓✓' : '✓'}
               </Text>
             </View>
@@ -191,8 +261,17 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
     return (
       <View style={styles.rowLeft}>
         <Text style={styles.senderName}>{friend.display_name}</Text>
-        <View style={styles.bubbleIn}>
-          <Text style={styles.bubbleTextIn}>{item.body}</Text>
+        <View style={[styles.bubbleIn, isLocationShare && styles.bubbleMap]}>
+          {isLocationShare ? (
+            <LocationMapCard
+              latitude={item.shared_lat!}
+              longitude={item.shared_lng!}
+              label={item.shared_location_label ?? `${item.shared_lat}, ${item.shared_lng}`}
+              isOutgoing={false}
+            />
+          ) : (
+            <Text style={styles.bubbleTextIn}>{item.body}</Text>
+          )}
           <Text style={styles.timeIn}>{formatTime(item.created_at)}</Text>
         </View>
       </View>
@@ -253,6 +332,7 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
 
         {/* Input bar */}
         <View style={styles.inputBar}>
+          <LocationShareButton onLocationShared={handleLocationShare} />
           <TextInput
             style={styles.textInput}
             value={inputText}
@@ -360,6 +440,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     maxWidth: '75%',
+  },
+  bubbleMap: {
+    paddingHorizontal: 4,
+    paddingVertical: 4,
   },
   bubbleTextOut: {
     color: '#FFFFFF',

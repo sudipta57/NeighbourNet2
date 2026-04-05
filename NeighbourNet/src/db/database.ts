@@ -47,7 +47,10 @@ export function initDatabase(): void {
       sender_id TEXT NOT NULL,
       is_outgoing INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
-      delivered INTEGER NOT NULL DEFAULT 0
+      delivered INTEGER NOT NULL DEFAULT 0,
+      shared_lat REAL,
+      shared_lng REAL,
+      shared_location_label TEXT
     );
 
     CREATE INDEX IF NOT EXISTS idx_chat_thread
@@ -56,6 +59,11 @@ export function initDatabase(): void {
     CREATE INDEX IF NOT EXISTS idx_chat_friend
       ON chat_messages(friend_device_uuid, created_at DESC);
   `);
+
+  // Safe migrations for existing databases that lack location columns
+  try { db.runSync(`ALTER TABLE chat_messages ADD COLUMN shared_lat REAL`) } catch (_) {}
+  try { db.runSync(`ALTER TABLE chat_messages ADD COLUMN shared_lng REAL`) } catch (_) {}
+  try { db.runSync(`ALTER TABLE chat_messages ADD COLUMN shared_location_label TEXT`) } catch (_) {}
 }
 
 export function insertMessage(message: Message): void {
@@ -282,8 +290,9 @@ export function updateFriendLastSeen(
 export function saveChatMessage(msg: ChatMessage): void {
   db.runSync(
     `INSERT OR IGNORE INTO chat_messages
-      (id, thread_id, friend_device_uuid, body, sender_id, is_outgoing, created_at, delivered)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, thread_id, friend_device_uuid, body, sender_id, is_outgoing, created_at, delivered,
+       shared_lat, shared_lng, shared_location_label)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       msg.id,
       msg.thread_id,
@@ -293,6 +302,9 @@ export function saveChatMessage(msg: ChatMessage): void {
       msg.is_outgoing ? 1 : 0,
       msg.created_at,
       msg.delivered ? 1 : 0,
+      msg.shared_lat ?? null,
+      msg.shared_lng ?? null,
+      msg.shared_location_label ?? null,
     ]
   );
 }
@@ -310,6 +322,9 @@ export function getChatHistory(
     is_outgoing: number;
     created_at: number;
     delivered: number;
+    shared_lat: number | null;
+    shared_lng: number | null;
+    shared_location_label: string | null;
   }>(
     `SELECT * FROM chat_messages
       WHERE friend_device_uuid = ?
@@ -322,6 +337,9 @@ export function getChatHistory(
       ...row,
       is_outgoing: row.is_outgoing === 1,
       delivered: row.delivered === 1,
+      shared_lat: row.shared_lat ?? undefined,
+      shared_lng: row.shared_lng ?? undefined,
+      shared_location_label: row.shared_location_label ?? undefined,
     }))
     .reverse();
 }

@@ -16,8 +16,11 @@ export interface Message {
   synced: boolean;
   destination_id?: string;
   chat_thread_id?: string;
-  message_type: 'sos' | 'chat' | 'location_beacon';
+  message_type: 'sos' | 'chat' | 'location_beacon' | 'gps_share';
   sender_name?: string;
+  shared_lat?: number;
+  shared_lng?: number;
+  shared_location_label?: string;
 }
 
 export interface Friend {
@@ -38,6 +41,9 @@ export interface ChatMessage {
   is_outgoing: boolean;
   created_at: number;
   delivered: boolean;
+  shared_lat?: number;
+  shared_lng?: number;
+  shared_location_label?: string;
 }
 
 export const SOS_TEMPLATES = [

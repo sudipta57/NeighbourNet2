@@ -254,8 +254,9 @@ const App = () => {
             return
           }
 
-          // Handle incoming CHAT messages
-          if (incomingMeshMessage.message_type === 'chat') {
+          // Handle incoming CHAT and GPS_SHARE messages
+          if (incomingMeshMessage.message_type === 'chat' ||
+              incomingMeshMessage.message_type === 'gps_share') {
             const myUUID = await getDeviceUUID()
 
             // Accept if addressed to me directly, or broadcast (no destination_id)
@@ -294,6 +295,9 @@ const App = () => {
               is_outgoing: false,
               created_at: Date.now(),
               delivered: true,
+              shared_lat: incomingMeshMessage.shared_lat,
+              shared_lng: incomingMeshMessage.shared_lng,
+              shared_location_label: incomingMeshMessage.shared_location_label,
             }
 
             saveChatMessage(chatMsg)
