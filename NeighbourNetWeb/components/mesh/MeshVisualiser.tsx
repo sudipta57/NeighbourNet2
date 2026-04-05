@@ -32,12 +32,7 @@ const MeshVisualiser = forwardRef<MeshVisualiserRef, Props>(({
   // Expose methods to parent
   useImperativeHandle(ref, () => ({
     resetSimulation: () => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      d3.select(canvas).transition().duration(750).call(
-        d3.zoom<HTMLCanvasElement, unknown>().transform as any, 
-        d3.zoomIdentity
-      );
+      transformRef.current = d3.zoomIdentity;
       recenter();
     },
     exportPNG: () => {
@@ -200,8 +195,8 @@ const MeshVisualiser = forwardRef<MeshVisualiserRef, Props>(({
     let dragStartX = 0;
     let dragStartY = 0;
 
-    const findNodeAtCursor = (e: any) => {
-      const [mx, my] = d3.pointer(e, canvas);
+    const findNodeAtCursor = (event: Parameters<typeof d3.pointer>[0]) => {
+      const [mx, my] = d3.pointer(event, canvas);
       const t = transformRef.current;
       const x = (mx - t.x) / t.k;
       const y = (my - t.y) / t.k;
@@ -222,29 +217,32 @@ const MeshVisualiser = forwardRef<MeshVisualiserRef, Props>(({
       return closest;
     };
 
-    const drag = d3.drag<HTMLCanvasElement, unknown>()
+    const drag = d3.drag<HTMLCanvasElement, unknown, MeshNode | null>()
       .subject((e) => {
-        return findNodeAtCursor({ sourceEvent: e.sourceEvent, ...e }) as any;
+        return findNodeAtCursor(e.sourceEvent as Parameters<typeof d3.pointer>[0]);
       })
       .on('start', (e) => {
         dragStartX = e.x;
         dragStartY = e.y;
-        if (e.subject) {
-          setNodeFixed(e.subject.id, e.subject.x, e.subject.y);
+        const subject = e.subject as MeshNode | undefined;
+        if (subject && subject.x !== undefined && subject.y !== undefined) {
+          setNodeFixed(subject.id, subject.x, subject.y);
         }
       })
       .on('drag', (e) => {
-        if (e.subject) {
-          setNodeFixed(e.subject.id, e.x, e.y);
+        const subject = e.subject as MeshNode | undefined;
+        if (subject) {
+          setNodeFixed(subject.id, e.x, e.y);
         }
       })
       .on('end', (e) => {
-        if (e.subject) {
-          releaseNode(e.subject.id);
+        const subject = e.subject as MeshNode | undefined;
+        if (subject) {
+          releaseNode(subject.id);
           const dx = e.x - dragStartX;
           const dy = e.y - dragStartY;
           if (Math.abs(dx) < 5 && Math.abs(dy) < 5 && onNodeClick) {
-            onNodeClick(e.subject); // Click without drag
+            onNodeClick(subject); // Click without drag
           }
         }
       });
@@ -268,7 +266,7 @@ const MeshVisualiser = forwardRef<MeshVisualiserRef, Props>(({
       }
     });
 
-    sel.on('mouseup', (e) => {
+    sel.on('mouseup', () => {
       // In case drag didn't trigger
     });
 

@@ -6,7 +6,7 @@ import { MeshNode } from '../../../types/mesh';
 import MeshStatsBar from '../../../components/mesh/MeshStatsBar';
 import NodeDetailPanel from '../../../components/mesh/NodeDetailPanel';
 import MeshVisualiser, { MeshVisualiserRef } from '../../../components/mesh/MeshVisualiser';
-import { Download, Maximize, Filter, AlertTriangle, Activity } from 'lucide-react';
+import { Download, Maximize, AlertTriangle, Activity } from 'lucide-react';
 
 export default function MeshDashboardPage() {
   const { nodes, stats, isConnected, error, simulateSpiderWeb } = useMeshTelemetry();
@@ -29,7 +29,7 @@ export default function MeshDashboardPage() {
     if (!container) return;
     
     const ro = new ResizeObserver(entries => {
-      for (let entry of entries) {
+      for (const entry of entries) {
         const { width } = entry.contentRect;
         setDimensions({
           width,
@@ -149,7 +149,7 @@ export default function MeshDashboardPage() {
                 <h3 className="font-bold text-slate-800 text-lg mb-2">No active devices</h3>
                 <p className="text-sm text-slate-500 leading-relaxed font-medium">
                   No devices seen in the last 2 minutes.<br />
-                  Make sure at least one phone is running NeighbourNet with internet access, or click "🕸️ Simulate Web" above.
+                  Make sure at least one phone is running NeighbourNet with internet access, or click &quot;🕸️ Simulate Web&quot; above.
                 </p>
               </div>
             </div>

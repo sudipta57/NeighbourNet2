@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as d3 from 'd3';
 import { supabase } from '../../lib/supabaseClient';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { MeshTelemetry } from '../../lib/types';
-import { Download, Maximize, Filter, Network, Activity, Router, Share2 } from 'lucide-react';
+import { Download, Maximize, Activity } from 'lucide-react';
 
 interface MeshNetworkVisualiserProps {
   squadId?: string;
@@ -46,7 +47,7 @@ export default function MeshNetworkVisualiser({
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   
   // Realtime subscription ref
-  const channelRef = useRef<any>(null);
+  const channelRef = useRef<RealtimeChannel | null>(null);
 
   // Stats derived from ref mapping, updated periodically for UI
   const [stats, setStats] = useState({ active: 0, edges: 0, gateways: 0, avgHop: 0 });
@@ -405,8 +406,8 @@ export default function MeshNetworkVisualiser({
       
       channelRef.current = supabase.channel('mesh_telemetry_changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'mesh_telemetry' }, payload => {
-          const newDoc = payload.new as MeshTelemetry;
-          if (squadId && (newDoc as any).squad_id !== squadId) return;
+          const newDoc = payload.new as MeshTelemetry & { squad_id?: string };
+          if (squadId && newDoc.squad_id !== squadId) return;
           processNewData([newDoc]);
         })
         .subscribe();
@@ -438,10 +439,10 @@ export default function MeshNetworkVisualiser({
     const sim = simulationRef.current;
     if (!canvas || !sim) return;
     const cw = canvas.parentElement?.clientWidth || window.innerWidth;
-    d3.select(canvas).transition().duration(750).call(
-      d3.zoom<HTMLCanvasElement, unknown>().transform as any, 
-      d3.zoomIdentity.translate(cw/2, height/2).scale(1).translate(-cw/2, -height/2)
-    );
+    transformRef.current = d3.zoomIdentity
+      .translate(cw / 2, height / 2)
+      .scale(1)
+      .translate(-cw / 2, -height / 2);
   };
 
   return (
@@ -477,7 +478,7 @@ export default function MeshNetworkVisualiser({
           </div>
           <select 
             value={filterMode} 
-            onChange={(e) => setFilterMode(e.target.value as any)}
+            onChange={(e) => setFilterMode(e.target.value as 'all' | 'gateway' | 'active')}
             className="text-sm bg-slate-800/80 border border-slate-700 rounded-md px-3 py-1 outline-none text-slate-200 font-medium hover:bg-slate-700 transition focus:ring-2 focus:ring-indigo-500/50"
           >
             <option value="all">All Nodes</option>
@@ -511,7 +512,7 @@ export default function MeshNetworkVisualiser({
         {hoveredNode && (
           <div 
             className="absolute z-20 bg-slate-900/80 backdrop-blur-xl border border-white/10 shadow-[0_4px_30px_rgba(0,0,0,0.5)] rounded-xl p-3 pointer-events-none transform -translate-x-1/2 mt-3 text-white transition-all duration-100 ease-out"
-            style={{ left: Math.max(80, Math.min(tooltipPos.x, canvasRef.current?.offsetWidth! - 80)), top: tooltipPos.y }}
+            style={{ left: Math.max(80, Math.min(tooltipPos.x, (canvasRef.current?.offsetWidth ?? 0) - 80)), top: tooltipPos.y }}
           >
             <div className="flex items-center gap-2 mb-2 border-b border-slate-700 pb-2">
               <span className="text-2xl drop-shadow-lg">{hoveredNode.mascot}</span>
