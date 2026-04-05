@@ -3,14 +3,13 @@ import { ActivityIndicator, PermissionsAndroid, Platform, StyleSheet, Text, View
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import NetInfo from '@react-native-community/netinfo'
-import OnboardingScreen from './src/screens/OnboardingScreen'
 import SosScreen from './src/screens/SosScreen'
 import MeshStatusScreen from './src/screens/MeshStatusScreen'
 import FriendsScreen from './src/screens/FriendsScreen'
 import ProfileScreen from './src/screens/ProfileScreen'
 import ChatScreen from './src/screens/ChatScreen'
 import TabBar from './src/components/TabBar'
-import { isOnboardingComplete, markOnboardingComplete, getDeviceUUID } from './src/services/appState'
+import { getDeviceUUID } from './src/services/appState'
 import { startGatewaySync, stopGatewaySync } from './src/services/gatewaySync'
 import { onMessageReceived, onPeerConnected, onPeerDisconnected, startMesh, stopMesh } from './src/services/meshService'
 import { initDatabase, saveChatMessage, updateFriendLastSeen, getFriendByUUID, getFriendByCode, getFriends, saveFriend } from './src/db/database'
@@ -28,7 +27,6 @@ type TabName = 'sos' | 'mesh' | 'friends' | 'profile' | 'chat'
 
 const App = () => {
   const [appReady, setAppReady] = useState(false)
-  const [showOnboarding, setShowOnboarding] = useState(false)
   const [activeTab, setActiveTab] = useState<TabName>('sos')
   const [initError, setInitError] = useState<string | null>(null)
 
@@ -104,13 +102,6 @@ const App = () => {
 
       await runStep(() => {
         initDatabase()
-      })
-
-      await runStep(async () => {
-        const completed = await isOnboardingComplete()
-        if (!completed) {
-          setShowOnboarding(true)
-        }
       })
 
       await runStep(() => {
@@ -259,10 +250,14 @@ const App = () => {
               incomingMeshMessage.message_type === 'gps_share') {
             const myUUID = await getDeviceUUID()
 
-            // Accept if addressed to me directly, or broadcast (no destination_id)
+            // Accept if addressed to me directly, or broadcast (no destination_id),
+            // OR if the destination_id is not a UUID of any known friend — this handles
+            // the case where the sender has our stale UUID from before a reinstall.
             const isDirectToMe = incomingMeshMessage.destination_id === myUUID
             const isBroadcast = !incomingMeshMessage.destination_id
-            if (!isDirectToMe && !isBroadcast) return
+            const isStaleUUID = !isDirectToMe && !isBroadcast &&
+              !getFriendByUUID(incomingMeshMessage.destination_id!)
+            if (!isDirectToMe && !isBroadcast && !isStaleUUID) return
 
             const senderUUID = incomingMeshMessage.sender_id
             const senderCode = incomingMeshMessage.location_hint?.trim() ?? ''
@@ -374,11 +369,6 @@ const App = () => {
     }
   }, [])
 
-  const handleOnboardingComplete = useCallback(async () => {
-    await markOnboardingComplete()
-    setShowOnboarding(false)
-  }, [])
-
   const handleOpenChat = useCallback((friend: Friend) => {
     useAppStore.getState().setActiveChatFriend(friend)
     setActiveTab('chat')
@@ -398,10 +388,6 @@ const App = () => {
         {initError ? <Text style={styles.loadingError}>{initError}</Text> : null}
       </View>
     )
-  }
-
-  if (showOnboarding) {
-    return <OnboardingScreen onComplete={handleOnboardingComplete} />
   }
 
   const visibleTab = activeTab === 'chat' ? 'friends' : activeTab
