@@ -43,6 +43,8 @@ export function useMessages(): UseMessagesResult {
     try {
       setError(null);
       const raws = await fetchMessages({ acknowledged: false, limit: 200 });
+      console.log(raws);
+      
       setMessages(transformMessages(raws));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load messages');

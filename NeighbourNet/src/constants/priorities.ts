@@ -22,6 +22,7 @@ export const PRIORITY_LABELS = {
 export const MAX_QUEUE_SIZE = 500;
 export const INITIAL_TTL = 10;
 
-export const API_BASE_URL = 'https://towardly-celena-unspectacled.ngrok-free.dev';
+// export const API_BASE_URL = 'https://neighbournetapi.onrender.com';
+export const API_BASE_URL = 'https://towardly-celena-unspectacled.ngrok-free.dev'
 export const SYNC_CHUNK_SIZE = 50;
 export const SYNC_MAX_RETRIES = 3;

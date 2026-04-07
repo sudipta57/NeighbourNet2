@@ -165,7 +165,8 @@ def create_app() -> FastAPI:
         redoc_url="/redoc",
     )
 
-    # CORS — allow the Vercel dashboard and local dev to call the API.
+    # CORS — the dashboard does not use cookies/credentialed requests, so we
+    # keep the public wildcard origin and disable credentials.
     origins = [
         "https://neighbournet.vercel.app",
         "http://localhost:3000",
@@ -175,7 +176,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
-        allow_credentials=True,
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )
