@@ -120,3 +120,8 @@ Do **not** use `./gradlew :app:assembleDebug` directly — it fails with AGP 8.x
 ```bash
 adb -s PHONE_SERIAL logcat -d | grep -E "App init error|ReactNativeJS|FATAL"
 ```
+
+
+
+<!-- ./gradlew assembleRelease
+adb install -r /home/sudipta/D_drive/NeighbourNet2/NeighbourNet/android/app/build/outputs/apk/release/app-release.apk -->
