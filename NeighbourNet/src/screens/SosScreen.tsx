@@ -114,6 +114,7 @@ const SosScreen = () => {
 				message_id: uuidv4(),
 				body,
 				sender_id: HARD_CODED_USER_ID,
+				message_type: 'sos',
 				gps_lat: lat,
 				gps_lng: lng,
 				location_hint: locationHint,

@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native'
 import { getDisplayName, getMyFriendCode, setDisplayName } from '../services/profileService'
+import useAppStore from '../store/useAppStore'
 
 const ProfileScreen = () => {
   const [friendCode, setFriendCode] = useState<string>('----')
@@ -22,6 +23,7 @@ const ProfileScreen = () => {
   const handleNameChange = (name: string) => {
     setDisplayNameState(name)
     setDisplayName(name)
+    useAppStore.getState().setOwnDisplayName(name)
   }
 
   return (

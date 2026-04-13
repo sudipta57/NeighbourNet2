@@ -4,6 +4,19 @@ import { triageMessage } from './triageEngine'
 import type { Message } from '../types/message'
 import useMeshStore from '../store/meshStore'
 
+export interface LocationBeaconPayload {
+  type: 'LOCATION_BEACON'
+  senderId: string
+  displayName: string
+  friendCode: string
+  lat: number
+  lng: number
+  timestamp: number
+  accuracy?: number
+}
+
+export type MeshInboundMessage = Message | LocationBeaconPayload
+
 const NearbyMesh = (NativeModules as {
   NearbyMesh?: NativeModule & {
     startMesh: () => Promise<void>
@@ -70,6 +83,23 @@ export async function sendMessage(message: Message): Promise<number> {
   }
 }
 
+export async function sendRawMessageJson(messageJson: string): Promise<number> {
+  if (!NearbyMesh) {
+    console.warn('[NearbyMesh] module not available')
+    return 0
+  }
+  try {
+    const result = await NearbyMesh.sendMessage(messageJson)
+    if (result > 0) {
+      useMeshStore.getState().incrementRelayed()
+    }
+    return result
+  } catch (e) {
+    console.error('[NearbyMesh] sendRawMessageJson error:', e)
+    return 0
+  }
+}
+
 export async function broadcastMessage(message: Message): Promise<number> {
   return sendMessage(message)
 }
@@ -99,7 +129,7 @@ export async function scanNearbyPeers(): Promise<number> {
   return getConnectedPeerCount()
 }
 
-export function onMessageReceived(callback: (message: Message) => void): () => void {
+export function onMessageReceived(callback: (message: MeshInboundMessage) => void): () => void {
   if (!NearbyMesh) {
     return () => {}
   }
@@ -107,10 +137,22 @@ export function onMessageReceived(callback: (message: Message) => void): () => v
   const emitter = new NativeEventEmitter(NearbyMesh)
   const subscription = emitter.addListener('onMessageReceived', async (data: MessageEventData) => {
     try {
-      const parsed = JSON.parse(data.message) as Message
-      const triage = await triageMessage(parsed.body)
+      const parsed = JSON.parse(data.message) as MeshInboundMessage
+
+      if ('type' in parsed && parsed.type === 'LOCATION_BEACON') {
+        callback(parsed)
+        return
+      }
+
+      if (!('body' in parsed)) {
+        return
+      }
+
+      const incoming = parsed as Message
+
+      const triage = await triageMessage(incoming.body)
       const enriched: Message = {
-        ...parsed,
+        ...incoming,
         priority_tier: triage.tier,
         priority_score: triage.priority_score,
       }
