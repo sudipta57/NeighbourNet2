@@ -93,6 +93,7 @@ const toSyncMessage = (message: Message): SyncMessage => {
 		message_id: message.message_id,
 		body: message.body,
 		sender_id: message.sender_id,
+		message_type: message.message_type,
 		gps_lat: message.gps_lat,
 		gps_lng: message.gps_lng,
 		location_hint: message.location_hint?.trim() ? message.location_hint : null,

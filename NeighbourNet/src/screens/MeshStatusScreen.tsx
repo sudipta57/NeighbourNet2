@@ -16,6 +16,8 @@ import useAppStore from '../store/useAppStore'
 import { triggerManualSync } from '../services/gatewaySync'
 import { PRIORITY_COLORS, PRIORITY_LABELS } from '../constants/priorities'
 import { Message, PriorityTier } from '../types/message'
+import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import type { MeshStackParamList } from '../navigation/AppNavigator'
 
 const formatTwoDigit = (value: number): string => value.toString().padStart(2, '0')
 
@@ -130,15 +132,32 @@ interface StatCardProps {
 	value: string | number
 	color?: string
 	subtitle?: string
+	onPress?: () => void
 }
 
-const StatCard = ({ label, value, color = '#1A237E', subtitle }: StatCardProps) => {
+
+const StatCard = ({ label, value, color = '#1A237E', subtitle, onPress }: StatCardProps) => {
+	if (!onPress) {
+		return (
+			<View style={styles.statCard}>
+				<Text style={[styles.statValue, { color }]}>{value}</Text>
+				<Text style={styles.statLabel}>{label}</Text>
+				{subtitle ? <Text style={styles.statSubtitle}>{subtitle}</Text> : null}
+			</View>
+		)
+	}
+
 	return (
-		<View style={styles.statCard}>
+		<TouchableOpacity
+			style={[styles.statCard, styles.statCardTouchable]}
+			onPress={onPress}
+			activeOpacity={0.85}
+			accessibilityRole="button"
+		>
 			<Text style={[styles.statValue, { color }]}>{value}</Text>
 			<Text style={styles.statLabel}>{label}</Text>
 			{subtitle ? <Text style={styles.statSubtitle}>{subtitle}</Text> : null}
-		</View>
+		</TouchableOpacity>
 	)
 }
 
@@ -184,7 +203,9 @@ const MessageCard = ({ message }: MessageCardProps) => {
 	)
 }
 
-const MeshStatusScreen = () => {
+type MeshStatusScreenProps = NativeStackScreenProps<MeshStackParamList, 'MeshStatus'>
+
+const MeshStatusScreen = ({ navigation }: MeshStatusScreenProps) => {
 	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [isScanningPeers, setIsScanningPeers] = useState(false)
 	const [syncFeedback, setSyncFeedback] = useState<string | null>(null)
@@ -284,6 +305,9 @@ const MeshStatusScreen = () => {
 
 			<ScrollView
 				contentContainerStyle={styles.contentContainer}
+				scrollEventThrottle={16}
+				keyboardShouldPersistTaps="handled"
+				nestedScrollEnabled
 				refreshControl={
 					<RefreshControl
 						refreshing={isRefreshing}
@@ -299,6 +323,10 @@ const MeshStatusScreen = () => {
 						label="Peers Nearby"
 						color={peerCount > 0 ? '#2E7D32' : '#546E7A'}
 						subtitle={isMeshActive ? 'Mesh active' : 'Mesh inactive'}
+						onPress={() => {
+							console.log('PEER CARD TAPPED')
+							navigation.navigate('SignalMonitor')
+						}}
 					/>
 					<StatCard
 						value={queueDepth}
@@ -499,6 +527,12 @@ const styles = StyleSheet.create({
 			shadowRadius: 4,
 			elevation: 3,
 		},
+	},
+	statCardTouchable: {
+		justifyContent: 'flex-start',
+	},
+	statCardPressed: {
+		opacity: 0.9,
 	},
 	statValue: {
 		fontSize: 28,

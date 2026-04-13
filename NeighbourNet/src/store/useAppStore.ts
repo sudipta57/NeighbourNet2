@@ -14,6 +14,16 @@ import { startMesh } from '../services/meshService'
 
 type GatewayStatus = 'idle' | 'syncing' | 'success' | 'error'
 
+export interface FriendLocation {
+	senderId: string
+	displayName: string
+	friendCode: string
+	lat: number
+	lng: number
+	timestamp: number
+	accuracy?: number
+}
+
 interface AppState {
 	isMeshActive: boolean
 	peerCount: number
@@ -28,6 +38,7 @@ interface AppState {
 	lastSyncTime: number | null
 
 	deviceId: string | null
+	ownDisplayName: string
 
 	friends: Friend[]
 	activeChatFriend: Friend | null
@@ -50,6 +61,11 @@ interface AppState {
 	markSynced: (message_ids: string[]) => void
 
 	setDeviceId: (id: string) => void
+	setOwnDisplayName: (name: string) => void
+
+	friendLocations: FriendLocation[]
+	upsertFriendLocation: (loc: FriendLocation) => void
+	pruneStaleFriendLocations: () => void
 
 	setFriends: (friends: Friend[]) => void
 	addFriend: (friend: Friend) => void
@@ -70,10 +86,12 @@ const useAppStore = create<AppState>()((set, get) => ({
 	gatewayStatus: 'idle',
 	lastSyncTime: null,
 	deviceId: null,
+	ownDisplayName: '',
 
 	friends: [],
 	activeChatFriend: null,
 	chatMessages: {},
+	friendLocations: [],
 
 	setMeshActive: (active) => set({ isMeshActive: active }),
 
@@ -169,6 +187,23 @@ const useAppStore = create<AppState>()((set, get) => ({
 	},
 
 	setDeviceId: (id) => set({ deviceId: id }),
+
+	setOwnDisplayName: (name) => set({ ownDisplayName: name }),
+
+	upsertFriendLocation: (loc) =>
+		set((state) => {
+			const next = state.friendLocations.filter((entry) => entry.senderId !== loc.senderId)
+			next.push(loc)
+			return { friendLocations: next }
+		}),
+
+	pruneStaleFriendLocations: () =>
+		set((state) => {
+			const cutoff = Date.now() - 60000
+			return {
+				friendLocations: state.friendLocations.filter((entry) => entry.timestamp >= cutoff),
+			}
+		}),
 
 	setFriends: (friends) => set({ friends }),
 

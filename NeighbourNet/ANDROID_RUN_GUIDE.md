@@ -221,7 +221,6 @@ Without this, queue sync on a physical phone can fail with `Network request fail
 ### 5) Build debug APK once
 
 ```bash
-cd /home/sudipta/D_drive/all-projects-main/NeighbourNet/android
 ./gradlew assembleDebug
 cd ..
 ```

@@ -17,6 +17,7 @@ import useAppStore from '../store/useAppStore'
 
 interface FriendsScreenProps {
   onOpenChat: (friend: Friend) => void
+  onOpenMap: () => void
 }
 
 const AVATAR_COLORS = ['#1A237E', '#B71C1C', '#1B5E20', '#4A148C', '#E65100', '#006064']
@@ -52,7 +53,7 @@ function getStatusInfo(friend: Friend): { dot: string; label: string } {
   return { dot: '#FFC107', label: 'Identified, not nearby' }
 }
 
-const FriendsScreen = ({ onOpenChat }: FriendsScreenProps) => {
+const FriendsScreen = ({ onOpenChat, onOpenMap }: FriendsScreenProps) => {
   const friends = useAppStore((state) => state.friends)
   const [code, setCode] = useState('')
   const [feedback, setFeedback] = useState<{ msg: string; isError: boolean } | null>(null)
@@ -113,7 +114,13 @@ const FriendsScreen = ({ onOpenChat }: FriendsScreenProps) => {
         style={styles.inner}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <Text style={styles.screenTitle}>Friends</Text>
+        <View style={styles.headerRow}>
+          <Text style={styles.screenTitle}>Friends</Text>
+          <TouchableOpacity style={styles.mapButton} onPress={onOpenMap} activeOpacity={0.8}>
+            <Text style={styles.mapButtonIcon}>📍</Text>
+            <Text style={styles.mapButtonText}>Map</Text>
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.addSection}>
           <Text style={styles.sectionLabel}>Add Friend</Text>
@@ -183,7 +190,30 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 20,
+  },
+  mapButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    gap: 4,
+  },
+  mapButtonIcon: {
+    fontSize: 14,
+    color: '#FFFFFF',
+  },
+  mapButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   sectionLabel: {
     fontSize: 11,
