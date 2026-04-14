@@ -1,750 +1,610 @@
-import React, { useEffect, useCallback } from 'react'
+import React, { useEffect, useCallback, useState } from 'react'
 import {
-	View,
-	Text,
-	ScrollView,
-	StyleSheet,
-	SafeAreaView,
-	StatusBar,
-	RefreshControl,
-	TouchableOpacity,
-	FlatList,
-	ActivityIndicator,
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  SafeAreaView,
+  StatusBar,
+  RefreshControl,
+  TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native'
-import { useState } from 'react'
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import useAppStore from '../store/useAppStore'
-import { triggerManualSync } from '../services/gatewaySync'
-import { PRIORITY_COLORS, PRIORITY_LABELS } from '../constants/priorities'
-import { Message, PriorityTier } from '../types/message'
+import { Message } from '../types/message'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import type { MeshStackParamList } from '../navigation/AppNavigator'
 
 const formatTwoDigit = (value: number): string => value.toString().padStart(2, '0')
 
 const getTimePart = (date: Date): string => {
-	return `${formatTwoDigit(date.getHours())}:${formatTwoDigit(date.getMinutes())}`
+  return `${formatTwoDigit(date.getHours())}:${formatTwoDigit(date.getMinutes())}`
 }
 
-const isSameDay = (first: Date, second: Date): boolean => {
-	return (
-		first.getFullYear() === second.getFullYear() &&
-		first.getMonth() === second.getMonth() &&
-		first.getDate() === second.getDate()
-	)
-}
-
-export const formatTimestamp = (iso: string | null): string => {
-	if (iso === null) {
-		return 'Never'
-	}
-
-	try {
-		const date = new Date(iso)
-		if (Number.isNaN(date.getTime())) {
-			throw new Error('Invalid date string')
-		}
-
-		const now = new Date()
-		if (isSameDay(date, now)) {
-			return `Today at ${getTimePart(date)}`
-		}
-
-		const yesterday = new Date(now)
-		yesterday.setDate(now.getDate() - 1)
-		if (isSameDay(date, yesterday)) {
-			return `Yesterday at ${getTimePart(date)}`
-		}
-
-		return `${formatTwoDigit(date.getDate())}/${formatTwoDigit(date.getMonth() + 1)}/${date.getFullYear()} ${getTimePart(date)}`
-	} catch (_error) {
-		return 'Unknown'
-	}
-}
-
-export const formatRelativeTime = (iso: string): string => {
-	try {
-		const date = new Date(iso)
-		if (Number.isNaN(date.getTime())) {
-			throw new Error('Invalid date string')
-		}
-
-		const now = Date.now()
-		const diffSeconds = Math.max(0, Math.floor((now - date.getTime()) / 1000))
-
-		if (diffSeconds < 60) {
-			return 'just now'
-		}
-
-		const diffMinutes = Math.floor(diffSeconds / 60)
-		if (diffMinutes < 60) {
-			return `${diffMinutes} min ago`
-		}
-
-		const diffHours = Math.floor(diffMinutes / 60)
-		if (diffHours < 24) {
-			return `${diffHours} hr ago`
-		}
-
-		const diffDays = Math.floor(diffHours / 24)
-		return `${diffDays} days ago`
-	} catch (_error) {
-		return 'Unknown'
-	}
-}
-
-export const getPriorityIcon = (tier: PriorityTier): string => {
-	switch (tier) {
-		case 'CRITICAL':
-			return '🔴'
-		case 'HIGH':
-			return '🟠'
-		case 'MEDIUM':
-			return '🟢'
-		case 'LOW':
-		default:
-			return '⚪'
-	}
-}
-
-const getBadgeBackground = (hexColor: string): string => {
-	try {
-		const sanitized = hexColor.replace('#', '')
-		if (sanitized.length !== 6) {
-			return 'rgba(84, 110, 122, 0.15)'
-		}
-
-		const red = Number.parseInt(sanitized.slice(0, 2), 16)
-		const green = Number.parseInt(sanitized.slice(2, 4), 16)
-		const blue = Number.parseInt(sanitized.slice(4, 6), 16)
-
-		if ([red, green, blue].some(Number.isNaN)) {
-			return 'rgba(84, 110, 122, 0.15)'
-		}
-
-		return `rgba(${red}, ${green}, ${blue}, 0.15)`
-	} catch (_error) {
-		return 'rgba(84, 110, 122, 0.15)'
-	}
-}
-
-interface StatCardProps {
-	label: string
-	value: string | number
-	color?: string
-	subtitle?: string
-	onPress?: () => void
-}
-
-
-const StatCard = ({ label, value, color = '#1A237E', subtitle, onPress }: StatCardProps) => {
-	if (!onPress) {
-		return (
-			<View style={styles.statCard}>
-				<Text style={[styles.statValue, { color }]}>{value}</Text>
-				<Text style={styles.statLabel}>{label}</Text>
-				{subtitle ? <Text style={styles.statSubtitle}>{subtitle}</Text> : null}
-			</View>
-		)
-	}
-
-	return (
-		<TouchableOpacity
-			style={[styles.statCard, styles.statCardTouchable]}
-			onPress={onPress}
-			activeOpacity={0.85}
-			accessibilityRole="button"
-		>
-			<Text style={[styles.statValue, { color }]}>{value}</Text>
-			<Text style={styles.statLabel}>{label}</Text>
-			{subtitle ? <Text style={styles.statSubtitle}>{subtitle}</Text> : null}
-		</TouchableOpacity>
-	)
+export const formatRelativeTime = (iso: string | null): string => {
+  if (!iso) return 'Unknown'
+  try {
+    const date = new Date(iso)
+    if (Number.isNaN(date.getTime())) return 'Unknown'
+    return `${getTimePart(date)} PM` // simplified formatting to match design
+  } catch {
+    return 'Unknown'
+  }
 }
 
 interface MessageCardProps {
-	message: Message
+  message: Message
 }
 
 const MessageCard = ({ message }: MessageCardProps) => {
-	const priorityColor = PRIORITY_COLORS[message.priority_tier]
-	const locationText =
-		message.gps_lat !== null
-			? '📍 GPS attached'
-			: message.location_hint
-				? `📍 ${message.location_hint}`
-				: '📍 No location'
+  const isCritical = message.priority_tier === 'CRITICAL'
+  const isTrek = message.priority_tier === 'LOW' || message.body.toLowerCase().includes('trek')
+  const borderLeftColor = isCritical ? '#D32F2F' : 'transparent'
+  
+  return (
+    <View style={[styles.messageCard, { borderLeftColor, borderLeftWidth: 3 }]}>
+      <View style={styles.messageHeaderRow}>
+        <View style={styles.messageTypeWrap}>
+          {isCritical ? (
+            <MaterialCommunityIcons name="asterisk" size={12} color="#D32F2F" />
+          ) : (
+            <MaterialCommunityIcons name="message-text" size={12} color="#1565C0" />
+          )}
+          <Text style={[styles.messageTypeLabel, { color: isCritical ? '#D32F2F' : '#1565C0' }]}>
+            {isCritical ? 'CRITICAL ALERT' : 'TREK UPDATE'}
+          </Text>
+        </View>
+        <Text style={styles.messageTimeText}>{formatRelativeTime(message.created_at)}</Text>
+      </View>
 
-	return (
-		<View style={[styles.messageCard, { borderLeftColor: priorityColor }]}> 
-			<View style={styles.messageTopRow}>
-				<View style={styles.priorityWrap}>
-					<Text style={styles.priorityEmoji}>{getPriorityIcon(message.priority_tier)}</Text>
-					<Text style={[styles.priorityLabel, { color: priorityColor }]}>
-						{PRIORITY_LABELS[message.priority_tier]}
-					</Text>
-				</View>
-				<Text style={styles.messageMetaText}>{formatRelativeTime(message.created_at)}</Text>
-			</View>
+      <Text style={styles.messageTitle} numberOfLines={1}>
+        {message.body.split('\n')[0] || 'New Message'}
+      </Text>
+      <Text style={styles.messageBody} numberOfLines={2}>
+        {message.body}
+      </Text>
 
-			<Text style={styles.messageBody} numberOfLines={2}>
-				{message.body}
-			</Text>
-
-			<View style={styles.messageBottomRow}>
-				<Text style={styles.messageMetaText}>{locationText}</Text>
-				<View style={styles.messageBottomRight}>
-					<Text style={styles.messageMetaText}>Hop {message.hop_count}</Text>
-					<Text style={[styles.messageMetaText, message.synced ? styles.syncedText : styles.queuedText]}>
-						{message.synced ? '✓ Synced' : '⏳ Queued'}
-					</Text>
-				</View>
-			</View>
-		</View>
-	)
+      <View style={styles.messageBottomRow}>
+        <View style={styles.hopWrap}>
+          <MaterialCommunityIcons name="graphql" size={14} color="#00695C" />
+          <Text style={styles.hopText}>{message.hop_count ?? 1} HOP{message.hop_count && message.hop_count > 1 ? 'S' : ''}</Text>
+        </View>
+        <View style={styles.statusWrap}>
+          {message.synced ? (
+            <>
+              <MaterialCommunityIcons name="check-all" size={14} color="#424242" />
+              <Text style={styles.statusText}>DELIVERED</Text>
+            </>
+          ) : (
+            <Text style={styles.syncingText}>SYNCING...</Text>
+          )}
+        </View>
+      </View>
+    </View>
+  )
 }
 
 type MeshStatusScreenProps = NativeStackScreenProps<MeshStackParamList, 'MeshStatus'>
 
 const MeshStatusScreen = ({ navigation }: MeshStatusScreenProps) => {
-	const [isRefreshing, setIsRefreshing] = useState(false)
-	const [isScanningPeers, setIsScanningPeers] = useState(false)
-	const [syncFeedback, setSyncFeedback] = useState<string | null>(null)
-	const [activeTab, setActiveTab] = useState<'all' | 'unsynced' | 'critical'>('all')
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [activeTab, setActiveTab] = useState<'all' | 'unsynced' | 'critical' | 'trek'>('all')
 
-	const isMeshActive = useAppStore((state) => state.isMeshActive)
-	const peerCount = useAppStore((state) => state.peerCount)
-	const isOnline = useAppStore((state) => state.isOnline)
-	const isSyncing = useAppStore((state) => state.isSyncing)
-	const lastSyncAt = useAppStore((state) => state.lastSyncAt)
-	const queueDepth = useAppStore((state) => state.queueDepth)
-	const messages = useAppStore((state) => state.messages)
+  const isMeshActive = useAppStore((state) => state.isMeshActive)
+  const peerCount = useAppStore((state) => state.peerCount)
+  const queueDepth = useAppStore((state) => state.queueDepth)
+  const messages = useAppStore((state) => state.messages)
 
-	useEffect(() => {
-		useAppStore.getState().refreshMessages()
-		useAppStore.getState().refreshQueueDepth()
-		void useAppStore.getState().triggerPeerScan()
-	}, [])
+  useEffect(() => {
+    useAppStore.getState().refreshMessages()
+    useAppStore.getState().refreshQueueDepth()
+    void useAppStore.getState().triggerPeerScan()
+  }, [])
 
-	const handleScanPeers = useCallback(async () => {
-		setIsScanningPeers(true)
-		try {
-			await useAppStore.getState().triggerPeerScan()
-		} finally {
-			setIsScanningPeers(false)
-		}
-	}, [])
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true)
+    try {
+      useAppStore.getState().refreshMessages()
+      useAppStore.getState().refreshQueueDepth()
+    } finally {
+      setIsRefreshing(false)
+    }
+  }, [])
 
-	const critical = messages.filter((message) => message.priority_tier === 'CRITICAL')
-	const high = messages.filter((message) => message.priority_tier === 'HIGH')
-	const medium = messages.filter((message) => message.priority_tier === 'MEDIUM')
-	const low = messages.filter((message) => message.priority_tier === 'LOW')
+  const critical = messages.filter((message) => message.priority_tier === 'CRITICAL')
+  const allMessages = messages
+  const unsyncedMessages = messages.filter((message) => !message.synced)
 
-	const allMessages = [...critical, ...high, ...medium, ...low]
-	const unsyncedMessages = allMessages.filter((message) => !message.synced)
-	const displayedMessages =
-		activeTab === 'all' ? allMessages : activeTab === 'unsynced' ? unsyncedMessages : critical
+  const displayedMessages =
+    activeTab === 'all' ? allMessages : activeTab === 'unsynced' ? unsyncedMessages : activeTab === 'critical' ? critical : allMessages
 
-	const handleRefresh = useCallback(async () => {
-		setIsRefreshing(true)
-		try {
-			useAppStore.getState().refreshMessages()
-			useAppStore.getState().refreshQueueDepth()
-		} finally {
-			setIsRefreshing(false)
-		}
-	}, [])
+  const activePeersFound = peerCount > 0
 
-	const handleManualSync = useCallback(async () => {
-		if (!isOnline) {
-			setSyncFeedback('Offline: connect to internet to upload queued messages')
-			return
-		}
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F5F8FE" />
 
-		setSyncFeedback(null)
+      {/* Global Header */}
+      <View style={styles.appHeader}>
+        <View style={styles.appHeaderLeft}>
+          <MaterialCommunityIcons name="waves" size={24} color="#182A6A" />
+          <Text style={styles.appHeaderTitle}>NeighbourNet</Text>
+        </View>
+        <Ionicons name="radio-outline" size={24} color="#182A6A" />
+      </View>
 
-		try {
-			await triggerManualSync()
-			useAppStore.getState().refreshMessages()
-			useAppStore.getState().refreshQueueDepth()
+      <ScrollView
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor="#1A237E"
+            colors={['#1A237E']}
+          />
+        }
+      >
+        <View style={styles.meshStatusHeader}>
+          <Text style={styles.meshActiveLabel}>MESH {isMeshActive ? 'ACTIVE' : 'INACTIVE'}</Text>
+          <Text style={styles.networkTitle}>Network Status</Text>
+        </View>
 
-			const remaining = useAppStore.getState().queueDepth
-			if (remaining === 0) {
-				setSyncFeedback('Sync complete: all queued messages uploaded')
-			} else {
-				setSyncFeedback(`Sync finished: ${remaining} message(s) still queued`)
-			}
-		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error)
-			setSyncFeedback(`Sync failed: ${message}`)
-		}
-	}, [isOnline])
+        {/* Decorative Map */}
+        <View style={styles.mapContainer}>
+             <View style={styles.radarOuter}>
+                <View style={styles.radarMiddle}>
+                   <View style={styles.radarInner}>
+                       <View style={styles.radarCenter}>
+                          <Ionicons name="person" size={18} color="#FFFFFF" />
+                       </View>
+                       
+                       {/* Rafi Node */}
+                       <View style={[styles.node, styles.nodeRafi]}>
+                          <View style={styles.dotRafi} />
+                          <Text style={styles.nodeTextRafi}>RAFI</Text>
+                          <View style={styles.nodeIcon}>
+                            <MaterialCommunityIcons name="signal" size={14} color="#182A6A" />
+                          </View>
+                       </View>
+                       
+                       {/* Node 4X */}
+                       <View style={[styles.node, styles.node4x]}>
+                          <View style={styles.dot4x} />
+                          <Text style={styles.nodeText4x}>NODE_4X</Text>
+                          <View style={styles.nodeIcon}>
+                            <MaterialCommunityIcons name="graphql" size={14} color="#4FB99F" />
+                          </View>
+                       </View>
 
-	const tierBadges: Array<{ tier: PriorityTier; count: number }> = [
-		{ tier: 'CRITICAL', count: critical.length },
-		{ tier: 'HIGH', count: high.length },
-		{ tier: 'MEDIUM', count: medium.length },
-		{ tier: 'LOW', count: low.length },
-	]
+                       {/* Unknown Node */}
+                       <View style={[styles.node, styles.nodeUnknown]}>
+                          <View style={styles.dotUnknown} />
+                          <Text style={styles.nodeTextUnknown}>UNKNOWN</Text>
+                       </View>
 
-	void FlatList
+                   </View>
+                </View>
+             </View>
+        </View>
 
-	return (
-		<SafeAreaView style={styles.container}>
-			<StatusBar barStyle="light-content" backgroundColor="#1A237E" />
+        {/* Closest Friend Card */}
+        <View style={styles.closestCard}>
+           <View style={styles.closestLeft}>
+             <View style={styles.closestIconWrap}>
+               <MaterialCommunityIcons name="compass-outline" size={20} color="#182A6A" />
+             </View>
+             <View>
+               <Text style={styles.closestLabel}>CLOSEST FRIEND</Text>
+               <Text style={styles.closestTitle}>Rafi is ~40m away</Text>
+             </View>
+           </View>
+           <View style={styles.closestRight}>
+             <MaterialCommunityIcons name="navigation" size={24} color="#182A6A" style={styles.rotateNav} />
+             <Text style={styles.closestHops}>2 HOPS</Text>
+           </View>
+        </View>
 
-			<View style={styles.header}>
-				<View>
-					<Text style={styles.headerTitle}>Mesh Status</Text>
-					<Text style={styles.headerSubtitle}>Network & Queue Monitor</Text>
-				</View>
-				<View style={styles.headerStatusWrap}>
-					<Text style={styles.headerStatusDot}>{isMeshActive ? '🟢' : '⚫'}</Text>
-					<Text style={styles.headerStatusText}>{isMeshActive ? 'Active' : 'Offline'}</Text>
-				</View>
-			</View>
+        {/* Message Queue Section */}
+        <View style={styles.queueHeaderRow}>
+           <Text style={styles.queueTitle}>Message Queue</Text>
+           <View style={styles.pendingBadge}>
+             <Text style={styles.pendingText}>{queueDepth} PENDING</Text>
+           </View>
+        </View>
 
-			<ScrollView
-				contentContainerStyle={styles.contentContainer}
-				scrollEventThrottle={16}
-				keyboardShouldPersistTaps="handled"
-				nestedScrollEnabled
-				refreshControl={
-					<RefreshControl
-						refreshing={isRefreshing}
-						onRefresh={handleRefresh}
-						tintColor="#1A237E"
-						colors={['#1A237E']}
-					/>
-				}
-			>
-				<View style={styles.statRow}>
-					<StatCard
-						value={peerCount}
-						label="Peers Nearby"
-						color={peerCount > 0 ? '#2E7D32' : '#546E7A'}
-						subtitle={isMeshActive ? 'Mesh active' : 'Mesh inactive'}
-						onPress={() => {
-							console.log('PEER CARD TAPPED')
-							navigation.navigate('SignalMonitor')
-						}}
-					/>
-					<StatCard
-						value={queueDepth}
-						label="Messages Queued"
-						color={queueDepth > 0 ? '#E65100' : '#546E7A'}
-						subtitle={isOnline ? 'Online — will sync' : 'Offline'}
-					/>
-				</View>
+        <View style={styles.filterRow}>
+            <TouchableOpacity 
+              style={[styles.filterBtn, activeTab === 'all' && styles.filterBtnActive]} 
+              onPress={() => setActiveTab('all')}
+            >
+              <Text style={[styles.filterText, activeTab === 'all' && styles.filterTextActive]}>ALL</Text>
+            </TouchableOpacity>
 
-				<TouchableOpacity
-					style={[styles.scanButton, isScanningPeers && styles.scanButtonDisabled]}
-					onPress={handleScanPeers}
-					disabled={isScanningPeers}
-				>
-					<Text style={styles.scanButtonText}>
-						{isScanningPeers
-							? 'Scanning nearby devices...'
-							: isMeshActive
-								? 'Scan Nearby Devices'
-								: 'Start Mesh & Scan Devices'}
-					</Text>
-				</TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.filterBtn, activeTab === 'unsynced' && styles.filterBtnActive]} 
+              onPress={() => setActiveTab('unsynced')}
+            >
+              <Text style={[styles.filterText, activeTab === 'unsynced' && styles.filterTextActive]}>UNSYNCED</Text>
+            </TouchableOpacity>
 
-				<View style={styles.syncCard}>
-					<Text style={styles.syncTitle}>Sync Status</Text>
-					<View style={styles.syncTopRow}>
-						<Text style={styles.syncMetaText}>Last sync: {formatTimestamp(lastSyncAt)}</Text>
-						{isSyncing ? (
-							<ActivityIndicator size="small" color="#1A237E" />
-						) : (
-							<Text style={[styles.syncMetaText, lastSyncAt ? styles.syncedText : styles.notSyncedText]}>
-								{lastSyncAt ? '✓ Up to date' : 'Not synced yet'}
-							</Text>
-						)}
-					</View>
-					<View style={styles.syncBottomRow}>
-						<Text style={styles.syncMetaText}>Internet: </Text>
-						<Text style={[styles.syncMetaText, isOnline ? styles.syncedText : styles.offlineText]}>
-							{isOnline ? 'Connected ✓' : 'Offline ✗'}
-						</Text>
-					</View>
-					<TouchableOpacity
-						style={[styles.syncNowButton, (!isOnline || isSyncing) && styles.syncNowButtonDisabled]}
-						onPress={handleManualSync}
-						disabled={!isOnline || isSyncing}
-					>
-						<Text style={styles.syncNowButtonText}>{isSyncing ? 'Syncing...' : 'Sync now'}</Text>
-					</TouchableOpacity>
-					{syncFeedback ? <Text style={styles.syncFeedbackText}>{syncFeedback}</Text> : null}
-				</View>
+            <TouchableOpacity 
+              style={[styles.filterBtn, styles.filterBtnCritical, activeTab === 'critical' && styles.filterBtnCriticalActive]}
+              onPress={() => setActiveTab('critical')}
+            >
+              <Text style={[styles.filterText, styles.filterTextCritical, activeTab === 'critical' && styles.filterTextCriticalActive]}>CRITICAL</Text>
+            </TouchableOpacity>
 
-				<View style={styles.triageRow}>
-					{tierBadges.map(({ tier, count }) => {
-						const color = PRIORITY_COLORS[tier]
-						return (
-							<View
-								key={tier}
-								style={[
-									styles.tierBadge,
-									{ backgroundColor: getBadgeBackground(color), borderColor: color },
-								]}
-							>
-								<Text style={[styles.tierBadgeCount, { color }]}>{count}</Text>
-								<Text style={[styles.tierBadgeLabel, { color }]}>{tier}</Text>
-							</View>
-						)
-					})}
-				</View>
+            <TouchableOpacity 
+              style={[styles.filterBtn, activeTab === 'trek' && styles.filterBtnActive]} 
+              onPress={() => setActiveTab('trek')}
+            >
+              <Text style={[styles.filterText, activeTab === 'trek' && styles.filterTextActive]}>TREK</Text>
+            </TouchableOpacity>
+        </View>
 
-				<View style={styles.messageSection}>
-					<Text style={styles.messageSectionTitle}>Message Queue</Text>
+        <View style={styles.messagesContainer}>
+           {displayedMessages.slice(0, 5).map(message => (
+              <MessageCard key={message.message_id} message={message} />
+           ))}
+        </View>
 
-					<View style={styles.tabBar}>
-						<TouchableOpacity
-							style={[styles.tabButton, activeTab === 'all' && styles.activeTabButton]}
-							onPress={() => setActiveTab('all')}
-						>
-							<Text style={[styles.tabText, activeTab === 'all' && styles.activeTabText]}>
-								All ({allMessages.length})
-							</Text>
-						</TouchableOpacity>
+        {/* Bottom End indicator */}
+        <View style={styles.endIndicator}>
+           <MaterialCommunityIcons name="eye-off-outline" size={32} color="#B0BEC5" />
+           <Text style={styles.endIndicatorText}>NO OLDER MESSAGES IN QUEUE</Text>
+        </View>
 
-						<TouchableOpacity
-							style={[styles.tabButton, activeTab === 'unsynced' && styles.activeTabButton]}
-							onPress={() => setActiveTab('unsynced')}
-						>
-							<Text style={[styles.tabText, activeTab === 'unsynced' && styles.activeTabText]}>
-								Unsynced ({unsyncedMessages.length})
-							</Text>
-						</TouchableOpacity>
-
-						<TouchableOpacity
-							style={[styles.tabButton, activeTab === 'critical' && styles.activeTabButton]}
-							onPress={() => setActiveTab('critical')}
-						>
-							<Text style={[styles.tabText, activeTab === 'critical' && styles.activeTabText]}>
-								Critical ({critical.length})
-							</Text>
-						</TouchableOpacity>
-					</View>
-
-					{displayedMessages.length === 0 ? (
-						<View style={styles.emptyState}>
-							<Text style={styles.emptyIcon}>📭</Text>
-							<Text style={styles.emptyTitle}>No messages in this view</Text>
-							<Text style={styles.emptySubtitle}>Send an SOS or wait for mesh messages</Text>
-						</View>
-					) : (
-						displayedMessages.map((message) => (
-							<View key={message.message_id} style={styles.messageCardWrap}>
-								<MessageCard message={message} />
-							</View>
-						))
-					)}
-				</View>
-			</ScrollView>
-		</SafeAreaView>
-	)
+      </ScrollView>
+    </SafeAreaView>
+  )
 }
 
 const styles = StyleSheet.create({
-	container: {
-		flex: 1,
-		backgroundColor: '#F5F5F5',
-	},
-	header: {
-		backgroundColor: '#1A237E',
-		padding: 16,
-		flexDirection: 'row',
-		justifyContent: 'space-between',
-		alignItems: 'center',
-	},
-	headerTitle: {
-		color: '#FFFFFF',
-		fontSize: 22,
-		fontWeight: '700',
-	},
-	headerSubtitle: {
-		color: '#B0BEC5',
-		fontSize: 13,
-		marginTop: 2,
-	},
-	headerStatusWrap: {
-		flexDirection: 'row',
-		alignItems: 'center',
-		gap: 6,
-	},
-	headerStatusDot: {
-		fontSize: 14,
-	},
-	headerStatusText: {
-		color: '#FFFFFF',
-		fontSize: 13,
-		fontWeight: '600',
-	},
-	contentContainer: {
-		padding: 16,
-		paddingBottom: 28,
-	},
-	cardShadow: {
-		shadowColor: '#000',
-		shadowOffset: { width: 0, height: 2 },
-		shadowOpacity: 0.08,
-		shadowRadius: 4,
-		elevation: 3,
-	},
-	statRow: {
-		flexDirection: 'row',
-		justifyContent: 'space-between',
-		marginBottom: 12,
-	},
-	scanButton: {
-		backgroundColor: '#1565C0',
-		borderRadius: 10,
-		paddingVertical: 12,
-		paddingHorizontal: 14,
-		alignItems: 'center',
-		justifyContent: 'center',
-		marginBottom: 12,
-	},
-	scanButtonDisabled: {
-		opacity: 0.6,
-	},
-	scanButtonText: {
-		color: '#FFFFFF',
-		fontSize: 14,
-		fontWeight: '700',
-	},
-	statCard: {
-		width: '48%',
-		backgroundColor: '#FFFFFF',
-		borderRadius: 12,
-		padding: 16,
-		...{
-			shadowColor: '#000',
-			shadowOffset: { width: 0, height: 2 },
-			shadowOpacity: 0.08,
-			shadowRadius: 4,
-			elevation: 3,
-		},
-	},
-	statCardTouchable: {
-		justifyContent: 'flex-start',
-	},
-	statCardPressed: {
-		opacity: 0.9,
-	},
-	statValue: {
-		fontSize: 28,
-		fontWeight: '700',
-		lineHeight: 32,
-	},
-	statLabel: {
-		fontSize: 13,
-		color: '#666666',
-		marginTop: 4,
-	},
-	statSubtitle: {
-		fontSize: 11,
-		color: '#999999',
-		fontStyle: 'italic',
-		marginTop: 4,
-	},
-	syncCard: {
-		backgroundColor: '#FFFFFF',
-		borderRadius: 12,
-		padding: 16,
-		marginBottom: 12,
-		...{
-			shadowColor: '#000',
-			shadowOffset: { width: 0, height: 2 },
-			shadowOpacity: 0.08,
-			shadowRadius: 4,
-			elevation: 3,
-		},
-	},
-	syncTitle: {
-		fontSize: 17,
-		fontWeight: '700',
-		color: '#1A237E',
-		marginBottom: 10,
-	},
-	syncTopRow: {
-		flexDirection: 'row',
-		justifyContent: 'space-between',
-		alignItems: 'center',
-		marginBottom: 8,
-	},
-	syncBottomRow: {
-		flexDirection: 'row',
-		alignItems: 'center',
-	},
-	syncNowButton: {
-		marginTop: 10,
-		backgroundColor: '#1A237E',
-		borderRadius: 8,
-		paddingVertical: 10,
-		alignItems: 'center',
-	},
-	syncNowButtonDisabled: {
-		opacity: 0.6,
-	},
-	syncNowButtonText: {
-		fontSize: 13,
-		fontWeight: '700',
-		color: '#FFFFFF',
-	},
-	syncFeedbackText: {
-		marginTop: 8,
-		fontSize: 12,
-		color: '#616161',
-	},
-	syncMetaText: {
-		fontSize: 13,
-		color: '#616161',
-	},
-	syncedText: {
-		color: '#2E7D32',
-	},
-	queuedText: {
-		color: '#E65100',
-	},
-	offlineText: {
-		color: '#C62828',
-	},
-	notSyncedText: {
-		color: '#757575',
-	},
-	triageRow: {
-		flexDirection: 'row',
-		justifyContent: 'space-between',
-		marginBottom: 16,
-	},
-	tierBadge: {
-		flex: 1,
-		borderWidth: 1,
-		borderRadius: 10,
-		paddingVertical: 10,
-		alignItems: 'center',
-		marginRight: 8,
-	},
-	tierBadgeCount: {
-		fontSize: 16,
-		fontWeight: '700',
-		lineHeight: 18,
-	},
-	tierBadgeLabel: {
-		fontSize: 11,
-		fontWeight: '600',
-		marginTop: 4,
-	},
-	messageSection: {
-		marginTop: 4,
-	},
-	messageSectionTitle: {
-		fontSize: 18,
-		fontWeight: '700',
-		color: '#212121',
-		marginBottom: 10,
-	},
-	tabBar: {
-		flexDirection: 'row',
-		marginBottom: 12,
-		borderBottomWidth: 1,
-		borderBottomColor: '#E0E0E0',
-	},
-	tabButton: {
-		paddingVertical: 10,
-		marginRight: 18,
-		borderBottomWidth: 2,
-		borderBottomColor: 'transparent',
-	},
-	activeTabButton: {
-		borderBottomColor: '#C62828',
-	},
-	tabText: {
-		fontSize: 13,
-		color: '#757575',
-		fontWeight: '400',
-	},
-	activeTabText: {
-		fontWeight: '700',
-		color: '#212121',
-	},
-	emptyState: {
-		alignItems: 'center',
-		justifyContent: 'center',
-		paddingVertical: 36,
-	},
-	emptyIcon: {
-		fontSize: 28,
-		marginBottom: 8,
-	},
-	emptyTitle: {
-		fontSize: 15,
-		fontWeight: '600',
-		color: '#424242',
-	},
-	emptySubtitle: {
-		fontSize: 12,
-		color: '#757575',
-		marginTop: 4,
-	},
-	messageCardWrap: {
-		marginBottom: 8,
-	},
-	messageCard: {
-		backgroundColor: '#FFFFFF',
-		borderRadius: 10,
-		padding: 12,
-		borderLeftWidth: 4,
-		...{
-			shadowColor: '#000',
-			shadowOffset: { width: 0, height: 2 },
-			shadowOpacity: 0.08,
-			shadowRadius: 4,
-			elevation: 3,
-		},
-	},
-	messageTopRow: {
-		flexDirection: 'row',
-		justifyContent: 'space-between',
-		alignItems: 'center',
-	},
-	priorityWrap: {
-		flexDirection: 'row',
-		alignItems: 'center',
-		flex: 1,
-		paddingRight: 8,
-	},
-	priorityEmoji: {
-		fontSize: 13,
-		marginRight: 6,
-	},
-	priorityLabel: {
-		fontSize: 12,
-		fontWeight: '700',
-	},
-	messageBody: {
-		fontSize: 14,
-		color: '#333333',
-		marginTop: 6,
-	},
-	messageBottomRow: {
-		marginTop: 8,
-		flexDirection: 'row',
-		justifyContent: 'space-between',
-		alignItems: 'center',
-	},
-	messageBottomRight: {
-		flexDirection: 'row',
-		alignItems: 'center',
-		gap: 8,
-	},
-	messageMetaText: {
-		fontSize: 11,
-		color: '#757575',
-	},
+  container: {
+    flex: 1,
+    backgroundColor: '#FAFBFD',
+  },
+  appHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 8,
+    backgroundColor: '#FAFBFD',
+  },
+  appHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  appHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#182A6A',
+  },
+  contentContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 30,
+  },
+  meshStatusHeader: {
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 20,
+  },
+  meshActiveLabel: {
+    fontSize: 10,
+    color: '#4FB99F',
+    fontWeight: '800',
+    letterSpacing: 2,
+    marginBottom: 4,
+  },
+  networkTitle: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#0D1C4A',
+  },
+  mapContainer: {
+    height: 300,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  radarOuter: {
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    borderWidth: 1,
+    borderColor: '#F0F3FA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radarMiddle: {
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    borderWidth: 1,
+    borderColor: '#E8EDF9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radarInner: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 1,
+    borderColor: '#DDECFA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  radarCenter: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#182A6A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  // Map positioning for static mock
+  node: {
+    position: 'absolute',
+    alignItems: 'center',
+    zIndex: 20,
+  },
+  nodeIcon: {
+    marginTop: 2,
+  },
+  nodeRafi: {
+    top: -50,
+    right: -20,
+  },
+  dotRafi: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#182A6A',
+  },
+  nodeTextRafi: {
+    color: '#182A6A',
+    fontSize: 9,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+  node4x: {
+    bottom: -30,
+    left: -10,
+  },
+  dot4x: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#4FB99F',
+  },
+  nodeText4x: {
+    color: '#4FB99F',
+    fontSize: 9,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+  nodeUnknown: {
+    top: 20,
+    left: -70,
+  },
+  dotUnknown: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#BCC5D9',
+  },
+  nodeTextUnknown: {
+    color: '#707F9E',
+    fontSize: 9,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  closestCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2,
+    marginBottom: 24,
+  },
+  closestLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  closestIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#EBF0FA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closestLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#7B88A0',
+    letterSpacing: 1,
+    marginBottom: 2,
+  },
+  closestTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#182A6A',
+  },
+  closestRight: {
+    alignItems: 'center',
+  },
+  rotateNav: {
+    transform: [{ rotate: '45deg' }],
+    marginBottom: 4,
+  },
+  closestHops: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#182A6A',
+  },
+  queueHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  queueTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#182A6A',
+  },
+  pendingBadge: {
+    backgroundColor: '#E6ECF9',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  pendingText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#182A6A',
+  },
+  filterRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
+  filterBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: '#F0F3FA',
+  },
+  filterBtnActive: {
+    backgroundColor: '#0D1C4A',
+  },
+  filterText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4F5C7A',
+  },
+  filterTextActive: {
+    color: '#FFFFFF',
+  },
+  filterBtnCritical: {
+    backgroundColor: '#FFE9E9',
+  },
+  filterBtnCriticalActive: {
+    backgroundColor: '#D32F2F',
+  },
+  filterTextCritical: {
+    color: '#D32F2F',
+  },
+  filterTextCriticalActive: {
+    color: '#FFFFFF',
+  },
+  messagesContainer: {
+    marginTop: 4,
+  },
+  messageCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  messageHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  messageTypeWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  messageTypeLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  messageTimeText: {
+    fontSize: 10,
+    color: '#A0ADC9',
+  },
+  messageTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0D1C4A',
+    marginBottom: 4,
+  },
+  messageBody: {
+    fontSize: 13,
+    color: '#4F5C7A',
+    lineHeight: 18,
+  },
+  messageBottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  hopWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  hopText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#00695C',
+  },
+  statusWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  statusText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#424242',
+  },
+  syncingText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#9E9E9E',
+  },
+  endIndicator: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EEF2FB',
+    borderRadius: 16,
+    paddingVertical: 32,
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  endIndicatorText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#9EABC7',
+    marginTop: 8,
+    letterSpacing: 1,
+  },
 })
 
 export default MeshStatusScreen
