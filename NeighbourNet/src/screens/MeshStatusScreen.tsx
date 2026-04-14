@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import useAppStore from '../store/useAppStore'
+import useMeshStore from '../store/meshStore'
 import { Message } from '../types/message'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import type { MeshStackParamList } from '../navigation/AppNavigator'
@@ -96,6 +97,7 @@ const MeshStatusScreen = ({ navigation }: MeshStatusScreenProps) => {
   const peerCount = useAppStore((state) => state.peerCount)
   const queueDepth = useAppStore((state) => state.queueDepth)
   const messages = useAppStore((state) => state.messages)
+  const currentPeers = useMeshStore((state) => state.currentPeers)
 
   useEffect(() => {
     useAppStore.getState().refreshMessages()
@@ -131,6 +133,23 @@ const MeshStatusScreen = ({ navigation }: MeshStatusScreenProps) => {
 
   const activePeersFound = peerCount > 0
   const visibleMessages = showAllMessages ? displayedMessages : displayedMessages.slice(0, 5)
+  const visualNodes = currentPeers.slice(0, 5)
+
+  const VISUAL_NODE_POSITIONS = [
+    { top: -50, right: -20 },
+    { bottom: -30, left: -10 },
+    { top: 20, left: -70 },
+    { top: -20, left: 100 },
+    { bottom: -10, right: -60 },
+  ]
+
+  const VISUAL_NODE_COLORS = [
+    '#182A6A', // Dark Blue
+    '#4FB99F', // Mint Green
+    '#D32F2F', // Red
+    '#E65100', // Orange
+    '#6A1B9A', // Purple
+  ]
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -185,51 +204,67 @@ const MeshStatusScreen = ({ navigation }: MeshStatusScreenProps) => {
                           <Ionicons name="person" size={18} color="#FFFFFF" />
                        </View>
                        
-                       {/* Rafi Node */}
-                       <View style={[styles.node, styles.nodeRafi]}>
-                          <View style={styles.dotRafi} />
-                          <Text style={styles.nodeTextRafi}>RAFI</Text>
-                          <View style={styles.nodeIcon}>
-                            <MaterialCommunityIcons name="signal" size={14} color="#182A6A" />
-                          </View>
-                       </View>
-                       
-                       {/* Node 4X */}
-                       <View style={[styles.node, styles.node4x]}>
-                          <View style={styles.dot4x} />
-                          <Text style={styles.nodeText4x}>NODE_4X</Text>
-                          <View style={styles.nodeIcon}>
-                            <MaterialCommunityIcons name="graphql" size={14} color="#4FB99F" />
-                          </View>
-                       </View>
-
-                       {/* Unknown Node */}
-                       <View style={[styles.node, styles.nodeUnknown]}>
-                          <View style={styles.dotUnknown} />
-                          <Text style={styles.nodeTextUnknown}>UNKNOWN</Text>
-                       </View>
-
-                   </View>
+                       {/* Dynamic Connected Nodes */}
+                       {visualNodes.map((peer, index) => {
+                         const pos = VISUAL_NODE_POSITIONS[index]
+                         const color = VISUAL_NODE_COLORS[index]
+                         const peerId = peer.id || (peer as any).endpointId || `node-${index}`
+                         const peerName = peerId.slice(-6).toUpperCase()
+                         const rssiText = peer.rssi ? `${Math.max(-100, Math.min(-40, peer.rssi))}dB` : 'MESH'
+                         
+                         return (
+                           <View key={peerId} style={[styles.node, pos]}>
+                              <View style={[styles.dynamicDot, { backgroundColor: color }]} />
+                              <Text style={[styles.dynamicNodeText, { color }]}>{peerName}</Text>
+                              <Text style={[styles.dynamicNodeRssi, { color }]}>{rssiText}</Text>
+                              <View style={styles.nodeIcon}>
+                                <MaterialCommunityIcons name="signal" size={12} color={color} />
+                              </View>
+                           </View>
+                         )
+                       })}
+                    </View>
                 </View>
              </View>
         </View>
 
-        {/* Closest Friend Card */}
-        <View style={styles.closestCard}>
-           <View style={styles.closestLeft}>
-             <View style={styles.closestIconWrap}>
-               <MaterialCommunityIcons name="compass-outline" size={20} color="#182A6A" />
+        {/* Connected Peers Cards */}
+        {currentPeers.length > 0 ? (
+          currentPeers.map((peer, index) => {
+            const peerId = peer.id || (peer as any).endpointId || `node-${index}`
+            return (
+              <View key={peerId} style={styles.closestCard}>
+                 <View style={styles.closestLeft}>
+                   <View style={styles.closestIconWrap}>
+                     <MaterialCommunityIcons name="access-point-network" size={20} color="#182A6A" />
+                   </View>
+                   <View>
+                     <Text style={styles.closestLabel}>CONNECTED NODE</Text>
+                     <Text style={styles.closestTitle}>Node {peerId.slice(-6).toUpperCase()} Active</Text>
+                   </View>
+                 </View>
+                 <View style={styles.closestRight}>
+                   <MaterialCommunityIcons name="signal" size={24} color="#4FB99F" />
+                   <Text style={[styles.closestHops, { color: '#4FB99F' }]}>
+                     {peer.rssi ? `${Math.max(-100, Math.min(-40, peer.rssi))} dBm` : 'MESH'}
+                   </Text>
+                 </View>
+              </View>
+            )
+          })
+        ) : (
+          <View style={styles.closestCard}>
+             <View style={styles.closestLeft}>
+               <View style={styles.closestIconWrap}>
+                 <MaterialCommunityIcons name="access-point-network-off" size={20} color="#A0ADC9" />
+               </View>
+               <View>
+                 <Text style={styles.closestLabel}>MESH NETWORK</Text>
+                 <Text style={[styles.closestTitle, { color: '#7B88A0' }]}>No active nodes nearby</Text>
+               </View>
              </View>
-             <View>
-               <Text style={styles.closestLabel}>CLOSEST FRIEND</Text>
-               <Text style={styles.closestTitle}>Rafi is ~40m away</Text>
-             </View>
-           </View>
-           <View style={styles.closestRight}>
-             <MaterialCommunityIcons name="navigation" size={24} color="#182A6A" style={styles.rotateNav} />
-             <Text style={styles.closestHops}>2 HOPS</Text>
-           </View>
-        </View>
+          </View>
+        )}
 
         {/* Message Queue Section */}
         <View style={styles.queueHeaderRow}>
@@ -422,53 +457,21 @@ const styles = StyleSheet.create({
   nodeIcon: {
     marginTop: 2,
   },
-  nodeRafi: {
-    top: -50,
-    right: -20,
-  },
-  dotRafi: {
+  dynamicDot: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#182A6A',
   },
-  nodeTextRafi: {
-    color: '#182A6A',
+  dynamicNodeText: {
     fontSize: 9,
     fontWeight: '800',
     marginTop: 4,
   },
-  node4x: {
-    bottom: -30,
-    left: -10,
-  },
-  dot4x: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#4FB99F',
-  },
-  nodeText4x: {
-    color: '#4FB99F',
-    fontSize: 9,
-    fontWeight: '800',
-    marginTop: 4,
-  },
-  nodeUnknown: {
-    top: 20,
-    left: -70,
-  },
-  dotUnknown: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#BCC5D9',
-  },
-  nodeTextUnknown: {
-    color: '#707F9E',
-    fontSize: 9,
+  dynamicNodeRssi: {
+    fontSize: 8,
     fontWeight: '700',
-    marginTop: 4,
+    opacity: 0.8,
+    marginTop: 1,
   },
   closestCard: {
     backgroundColor: '#FFFFFF',
