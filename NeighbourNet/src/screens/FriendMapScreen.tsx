@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Location from 'expo-location'
 import { WebView } from 'react-native-webview'
+import { MaterialCommunityIcons } from '@expo/vector-icons'
 import useAppStore from '../store/useAppStore'
 import { sendRawMessageJson } from '../services/meshService'
 import { startBeaconBroadcast, stopBeaconBroadcast } from '../services/locationBeacon'
@@ -50,15 +51,15 @@ function buildLeafletHtml(lat: number, lng: number): string {
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          html, body, #map { width: 100%; height: 100%; background: #0f172b; }
+          html, body, #map { width: 100%; height: 100%; background: #FAFBFD; }
           .you-marker {
             position: relative;
             width: 22px;
             height: 22px;
             border-radius: 50%;
-            background: #2E86FF;
+            background: #182A6A;
             border: 3px solid #ffffff;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
           }
           .you-marker::after {
             content: '';
@@ -68,7 +69,7 @@ function buildLeafletHtml(lat: number, lng: number): string {
             width: 22px;
             height: 22px;
             border-radius: 50%;
-            border: 2px solid #2E86FF;
+            border: 2px solid #182A6A;
             transform: translate(-50%, -50%);
             animation: pulse 2s infinite;
           }
@@ -168,7 +169,7 @@ const FriendMapScreen = ({ onBack }: FriendMapScreenProps) => {
 
   const syncOwnLocation = async (): Promise<void> => {
     const current = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
+      accuracy: Location.Accuracy.Highest,
     })
     setOwnLocation({
       lat: current.coords.latitude,
@@ -272,7 +273,7 @@ const FriendMapScreen = ({ onBack }: FriendMapScreenProps) => {
       <SafeAreaView style={styles.root} edges={['top']}>
         <View style={styles.header}>
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
-            <Text style={styles.backIcon}>‹</Text>
+            <MaterialCommunityIcons name="arrow-left" size={24} color="#182A6A" />
           </TouchableOpacity>
           <View style={styles.headerContent}>
             <Text style={styles.title}>Friend Map / বন্ধু মানচিত্র</Text>
@@ -298,7 +299,7 @@ const FriendMapScreen = ({ onBack }: FriendMapScreenProps) => {
     <SafeAreaView style={styles.root} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
-          <Text style={styles.backIcon}>‹</Text>
+          <MaterialCommunityIcons name="arrow-left" size={24} color="#182A6A" />
         </TouchableOpacity>
         <View style={styles.headerContent}>
           <View style={styles.titleRow}>
@@ -359,7 +360,7 @@ const FriendMapScreen = ({ onBack }: FriendMapScreenProps) => {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#1a2340',
+    backgroundColor: '#FAFBFD',
   },
   loadingWrap: {
     flex: 1,
@@ -367,34 +368,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   loadingText: {
-    color: '#8899aa',
+    color: '#7B88A0',
     fontSize: 14,
+    fontWeight: '600',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 12,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 16,
   },
   backButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#252f4a',
-    marginTop: 2,
-  },
-  backIcon: {
-    color: '#ffffff',
-    fontSize: 28,
-    lineHeight: 28,
-    marginTop: -2,
+    backgroundColor: '#F0F3FA',
   },
   headerContent: {
     flex: 1,
+    justifyContent: 'center',
+    paddingTop: 4,
   },
   titleRow: {
     flexDirection: 'row',
@@ -402,28 +399,30 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   title: {
-    flex: 1,
-    color: '#ffffff',
+    color: '#182A6A',
     fontSize: 22,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   subtitle: {
     marginTop: 4,
-    color: '#8899aa',
+    color: '#7B88A0',
     fontSize: 13,
+    fontWeight: '700',
   },
   liveDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#00c896',
+    backgroundColor: '#4FB99F',
   },
   mapWrap: {
     flex: 1,
-    marginHorizontal: 16,
-    borderRadius: 16,
+    marginHorizontal: 20,
+    borderRadius: 24,
     overflow: 'hidden',
-    backgroundColor: '#252f4a',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#F0F3FA',
   },
   mapContainer: {
     flex: 1,
@@ -446,90 +445,108 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   emptyTitle: {
-    color: '#ffffff',
+    color: '#182A6A',
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '800',
     textAlign: 'center',
   },
   emptySubtitle: {
     marginTop: 8,
-    color: '#8899aa',
+    color: '#7B88A0',
     fontSize: 13,
     lineHeight: 18,
     textAlign: 'center',
+    fontWeight: '600',
   },
   bottomSheet: {
     height: 140,
-    marginTop: 12,
+    marginTop: 16,
     marginBottom: 8,
   },
   cardsRow: {
-    paddingHorizontal: 16,
-    gap: 10,
+    paddingHorizontal: 20,
+    gap: 12,
     alignItems: 'stretch',
   },
   friendCard: {
     width: 140,
-    backgroundColor: '#252f4a',
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 10,
-    borderLeftWidth: 3,
+    padding: 14,
+    borderLeftWidth: 4,
+    borderWidth: 1,
+    borderColor: '#F0F3FA',
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 8,
+    elevation: 2,
   },
   cardMascot: {
     fontSize: 32,
   },
   cardName: {
     marginTop: 6,
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '700',
+    color: '#182A6A',
+    fontSize: 15,
+    fontWeight: '800',
   },
   cardCode: {
     marginTop: 2,
-    color: '#8899aa',
+    color: '#7B88A0',
     fontSize: 11,
+    fontWeight: '700',
   },
   cardAge: {
     marginTop: 6,
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   permissionCard: {
-    marginHorizontal: 16,
+    marginHorizontal: 20,
     marginTop: 12,
-    backgroundColor: '#252f4a',
-    borderRadius: 16,
-    padding: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#F0F3FA',
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 10,
+    elevation: 3,
   },
   permissionIcon: {
     fontSize: 32,
     marginBottom: 10,
   },
   permissionTitle: {
-    color: '#ffffff',
+    color: '#182A6A',
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '800',
     textAlign: 'center',
   },
   permissionSubtitle: {
     marginTop: 8,
-    color: '#8899aa',
+    color: '#7B88A0',
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 18,
+    fontWeight: '600',
   },
   permissionButton: {
     marginTop: 16,
-    backgroundColor: '#00c896',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    backgroundColor: '#0D1C4A',
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
   },
   permissionButtonText: {
     color: '#ffffff',
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '800',
+    letterSpacing: 1,
   },
 })
 
