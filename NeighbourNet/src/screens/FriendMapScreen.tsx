@@ -2,13 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Animated,
   Easing,
-  SafeAreaView,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  ScrollView,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Location from 'expo-location'
 import { WebView } from 'react-native-webview'
 import useAppStore from '../store/useAppStore'
@@ -259,7 +259,7 @@ const FriendMapScreen = ({ onBack }: FriendMapScreenProps) => {
 
   if (permissionState === 'checking') {
     return (
-      <SafeAreaView style={styles.root}>
+      <SafeAreaView style={styles.root} edges={['top']}>
         <View style={styles.loadingWrap}>
           <Text style={styles.loadingText}>Checking location permission...</Text>
         </View>
@@ -269,7 +269,7 @@ const FriendMapScreen = ({ onBack }: FriendMapScreenProps) => {
 
   if (permissionState !== 'granted' || !ownLocation) {
     return (
-      <SafeAreaView style={styles.root}>
+      <SafeAreaView style={styles.root} edges={['top']}>
         <View style={styles.header}>
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
             <Text style={styles.backIcon}>‹</Text>
@@ -295,7 +295,7 @@ const FriendMapScreen = ({ onBack }: FriendMapScreenProps) => {
   }
 
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaView style={styles.root} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
           <Text style={styles.backIcon}>‹</Text>

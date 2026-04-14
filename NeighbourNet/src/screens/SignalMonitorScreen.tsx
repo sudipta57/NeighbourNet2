@@ -4,13 +4,14 @@ import {
   DeviceEventEmitter,
   Easing,
   FlatList,
-  SafeAreaView,
+  Platform,
   StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import type { MeshStackParamList } from '../navigation/AppNavigator'
 import useMeshStore from '../store/meshStore'
@@ -249,7 +250,7 @@ const SignalMonitorScreen = ({ navigation }: Props) => {
   }, [])
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="light-content" backgroundColor="#1a2340" />
 
       <View style={styles.header}>

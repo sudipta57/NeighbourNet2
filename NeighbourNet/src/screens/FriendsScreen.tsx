@@ -3,13 +3,13 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import { Friend } from '../types/message'
 import { getFriendByCode, saveFriend } from '../db/database'
@@ -260,7 +260,7 @@ const FriendsScreen = ({ onOpenChat, onOpenMap }: FriendsScreenProps) => {
   )
 
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaView style={styles.root} edges={['top']}>
       {/* Global Header */}
       <View style={styles.appHeader}>
         <View style={styles.headerLeftWrap}>
@@ -270,7 +270,7 @@ const FriendsScreen = ({ onOpenChat, onOpenMap }: FriendsScreenProps) => {
         <Ionicons name="radio-outline" size={24} color="#182A6A" />
       </View>
 
-      <KeyboardAvoidingView style={styles.inner} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <KeyboardAvoidingView style={styles.inner} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <FlatList
           data={friends}
           keyExtractor={(item) => item.friend_code}

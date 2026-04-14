@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react'
 import {
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
@@ -10,6 +9,7 @@ import {
   TouchableOpacity,
   ScrollView,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import { getDisplayName, getMyFriendCode, setDisplayName } from '../services/profileService'
 import useAppStore from '../store/useAppStore'
@@ -36,7 +36,7 @@ const ProfileScreen = () => {
   ]
 
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaView style={styles.root} edges={['top']}>
       {/* Global Header */}
       <View style={styles.appHeader}>
         <View style={styles.appHeaderLeft}>
@@ -52,7 +52,7 @@ const ProfileScreen = () => {
         showsVerticalScrollIndicator={false}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.inner}
         >
           {/* Main Blue Card */}
@@ -121,7 +121,7 @@ const ProfileScreen = () => {
                 onPress={() => setActiveProtocol('DISASTER')}
               >
                 <MaterialCommunityIcons
-                  name="alert-triangle"
+                  name="alert-circle"
                   size={20}
                   color={activeProtocol === 'DISASTER' ? '#FFFFFF' : '#455A64'}
                 />
@@ -151,7 +151,7 @@ const ProfileScreen = () => {
                   key={index}
                   style={[
                     styles.chartBar,
-                    { height: h + '%', opacity: 0.4 + (index / barHeights.length) * 0.6 },
+                    { height: `${h}%` as any, opacity: 0.4 + (index / barHeights.length) * 0.6 },
                   ]}
                 />
               ))}

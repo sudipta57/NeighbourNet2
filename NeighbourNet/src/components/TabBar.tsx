@@ -1,6 +1,7 @@
 import React from 'react'
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 interface TabBarProps {
   activeTab: 'sos' | 'mesh' | 'friends' | 'profile'
@@ -9,8 +10,12 @@ interface TabBarProps {
 }
 
 const TabBar = ({ activeTab, onTabChange, criticalCount }: TabBarProps) => {
+  const insets = useSafeAreaInsets()
+  const paddingBottom = Platform.OS === 'ios' ? Math.max(20, insets.bottom) : Math.max(10, insets.bottom)
+  const height = 55 + paddingBottom
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom, height }]}>
       <TouchableOpacity style={styles.tabButton} onPress={() => onTabChange('sos')} activeOpacity={0.8}>
         <View style={styles.iconWrap}>
           <MaterialCommunityIcons 
@@ -75,8 +80,6 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     backgroundColor: '#FAFCFF',
-    height: 75,
-    paddingBottom: Platform.OS === 'ios' ? 20 : 10,
     alignItems: 'center',
     justifyContent: 'space-around',
     borderTopWidth: 1,

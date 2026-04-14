@@ -4,12 +4,12 @@ import {
   Text,
   ScrollView,
   StyleSheet,
-  SafeAreaView,
-  StatusBar,
   RefreshControl,
   TouchableOpacity,
   ActivityIndicator,
+  StatusBar,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import useAppStore from '../store/useAppStore'
 import { Message } from '../types/message'
@@ -131,7 +131,7 @@ const MeshStatusScreen = ({ navigation }: MeshStatusScreenProps) => {
   const activePeersFound = peerCount > 0
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor="#F5F8FE" />
 
       {/* Global Header */}
@@ -158,6 +158,20 @@ const MeshStatusScreen = ({ navigation }: MeshStatusScreenProps) => {
         <View style={styles.meshStatusHeader}>
           <Text style={styles.meshActiveLabel}>MESH {isMeshActive ? 'ACTIVE' : 'INACTIVE'}</Text>
           <Text style={styles.networkTitle}>Network Status</Text>
+          <TouchableOpacity 
+            style={[styles.peerBadge, { backgroundColor: peerCount > 0 ? '#E4FCF3' : '#F0F3FA' }]}
+            onPress={() => navigation.navigate('SignalMonitor')}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons 
+              name={peerCount > 0 ? "account-network" : "account-network-outline"} 
+              size={12} 
+              color={peerCount > 0 ? '#00695C' : '#7B88A0'} 
+            />
+            <Text style={[styles.peerText, { color: peerCount > 0 ? '#00695C' : '#7B88A0' }]}>
+              {peerCount} {peerCount === 1 ? 'PEER' : 'PEERS'} CONNECTED
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Decorative Map */}
@@ -314,6 +328,20 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: '800',
     color: '#0D1C4A',
+  },
+  peerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  peerText: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   mapContainer: {
     height: 300,

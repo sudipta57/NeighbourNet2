@@ -8,11 +8,12 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-  SafeAreaView,
+  KeyboardAvoidingView,
   StatusBar,
   Vibration,
   Platform,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Location from 'expo-location'
 import { v4 as uuidv4 } from 'uuid'
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
@@ -160,8 +161,9 @@ const SosScreen = () => {
   const isSendDisabled = isSending || getMessageBody().trim().length === 0
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FAFBFD" />
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <StatusBar barStyle="dark-content" backgroundColor="#FAFBFD" />
 
       {/* Global Header */}
       <View style={styles.appHeader}>
@@ -195,7 +197,7 @@ const SosScreen = () => {
               style={[styles.contextBtn, contextType === 'disaster' && styles.contextBtnActive]}
               onPress={() => setContextType('disaster')}
             >
-              <MaterialCommunityIcons name="alert-triangle" size={20} color={contextType === 'disaster' ? '#FFF' : '#4F5C7A'} />
+              <MaterialCommunityIcons name="alert-circle" size={20} color={contextType === 'disaster' ? '#FFF' : '#4F5C7A'} />
               <View style={styles.contextTxtWrap}>
                  <Text style={[styles.contextTitle, contextType === 'disaster' && styles.contextTitleActive]}>Disaster /</Text>
                  <Text style={[styles.contextTitleBn, contextType === 'disaster' && styles.contextTitleBnActive]}>দুর্যোগ</Text>
@@ -254,7 +256,7 @@ const SosScreen = () => {
                style={[styles.gridCard, styles.gridCardLight, selectedTemplate === 2 && styles.gridCardSelected]}
                onPress={() => setSelectedTemplate(2)}
              >
-               <MaterialCommunityIcons name="water-drop" size={22} color="#182A6A" />
+               <MaterialCommunityIcons name="water" size={22} color="#182A6A" />
                <Text style={styles.cardTitleBlue}>No Food/Water</Text>
                <Text style={styles.cardSubtitleBlue}>খাদ্য/জল নেই</Text>
              </TouchableOpacity>
@@ -351,6 +353,7 @@ const SosScreen = () => {
         </TouchableOpacity>
 
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   )
 }
