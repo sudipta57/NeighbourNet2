@@ -30,6 +30,7 @@ const HARD_CODED_USER_ID = 'neighbournet-demo-user'
 
 const SosScreen = () => {
   const [selectedTemplate, setSelectedTemplate] = useState<number | null>(null)
+  const [customText, setCustomText] = useState('')
   const [locationHint, setLocationHint] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [lastResult, setLastResult] = useState<{ tier: PriorityTier; score: number } | null>(null)
@@ -60,6 +61,9 @@ const SosScreen = () => {
   }, [])
 
   const getMessageBody = useCallback((): string => {
+    if (customText.trim().length > 0) {
+      return customText.trim()
+    }
     if (selectedTemplate !== null) {
       const template = SOS_TEMPLATES[selectedTemplate]
       return `${template.label} (${template.labelEn})`
@@ -69,7 +73,7 @@ const SosScreen = () => {
       return `Custom SOS roughly at: ${locationHint}`
     }
     return ''
-  }, [selectedTemplate, locationHint])
+  }, [customText, selectedTemplate, locationHint])
 
   const handleSendSOS = useCallback(async () => {
     try {
@@ -151,12 +155,13 @@ const SosScreen = () => {
       )
 
       setSelectedTemplate(null)
+      setCustomText('')
       setLocationHint('')
     } catch (_error) {
       setIsSending(false)
       Alert.alert('Failed to send SOS. Please try again.')
     }
-  }, [addMessage, getMessageBody, locationGranted, locationHint])
+  }, [addMessage, getMessageBody, locationGranted, locationHint, customText])
 
   const isSendDisabled = isSending || getMessageBody().trim().length === 0
 
@@ -234,7 +239,10 @@ const SosScreen = () => {
            <View style={styles.gridRow}>
              <TouchableOpacity 
                style={[styles.gridCard, styles.gridCardTrapped, selectedTemplate === 0 && styles.gridCardSelected]}
-               onPress={() => setSelectedTemplate(0)}
+               onPress={() => {
+                 setSelectedTemplate(0)
+                 setCustomText('')
+               }}
              >
                <MaterialCommunityIcons name="home-flood" size={22} color="#D32F2F" />
                <Text style={styles.cardTitleRed}>Trapped</Text>
@@ -243,7 +251,10 @@ const SosScreen = () => {
 
              <TouchableOpacity 
                style={[styles.gridCard, styles.gridCardBlue, selectedTemplate === 1 && styles.gridCardSelected]}
-               onPress={() => setSelectedTemplate(1)}
+               onPress={() => {
+                 setSelectedTemplate(1)
+                 setCustomText('')
+               }}
              >
                <MaterialCommunityIcons name="medical-bag" size={22} color="#182A6A" />
                <Text style={styles.cardTitleBlue}>Medical</Text>
@@ -254,7 +265,10 @@ const SosScreen = () => {
            <View style={styles.gridRow}>
              <TouchableOpacity 
                style={[styles.gridCard, styles.gridCardLight, selectedTemplate === 2 && styles.gridCardSelected]}
-               onPress={() => setSelectedTemplate(2)}
+               onPress={() => {
+                 setSelectedTemplate(2)
+                 setCustomText('')
+               }}
              >
                <MaterialCommunityIcons name="water" size={22} color="#182A6A" />
                <Text style={styles.cardTitleBlue}>No Food/Water</Text>
@@ -263,7 +277,10 @@ const SosScreen = () => {
 
              <TouchableOpacity 
                style={[styles.gridCard, styles.gridCardLight, selectedTemplate === 3 && styles.gridCardSelected]}
-               onPress={() => setSelectedTemplate(3)}
+               onPress={() => {
+                 setSelectedTemplate(3)
+                 setCustomText('')
+               }}
              >
                <MaterialCommunityIcons name="human-cane" size={22} color="#182A6A" />
                <Text style={styles.cardTitleBlue}>Elderly</Text>
@@ -274,7 +291,10 @@ const SosScreen = () => {
            {/* I am safe */}
            <TouchableOpacity 
              style={[styles.safeButton, selectedTemplate === 4 && styles.safeButtonSelected]} 
-             onPress={() => setSelectedTemplate(4)}
+             onPress={() => {
+               setSelectedTemplate(4)
+               setCustomText('')
+             }}
            >
              <View style={styles.safeLeft}>
                <View style={styles.safeIconWrap}>
@@ -315,6 +335,28 @@ const SosScreen = () => {
              </View>
              <Text style={styles.dialStatus}>SCANNING 310° NW</Text>
            </View>
+        </View>
+
+        {/* Custom Message */}
+        <View style={styles.sectionMargin}>
+           <View style={styles.landmarkHeaderRow}>
+             <Text style={styles.sectionHeader}>CUSTOM MESSAGE <Text style={styles.sectionHeaderBn}>/ নিজে লিখুন</Text></Text>
+             <Text style={styles.charLimit}>{customText.length} / 500</Text>
+           </View>
+           
+           <TextInput
+             style={styles.landmarkInput}
+             placeholder="Describe your situation... (max 500 characters)"
+             placeholderTextColor="#90A4AE"
+             multiline
+             maxLength={500}
+             value={customText}
+             onChangeText={(t) => {
+               setCustomText(t)
+               setSelectedTemplate(null)
+             }}
+             textAlignVertical="top"
+           />
         </View>
 
         {/* Landmark & Details */}
