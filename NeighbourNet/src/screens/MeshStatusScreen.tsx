@@ -90,6 +90,7 @@ type MeshStatusScreenProps = NativeStackScreenProps<MeshStackParamList, 'MeshSta
 const MeshStatusScreen = ({ navigation }: MeshStatusScreenProps) => {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [activeTab, setActiveTab] = useState<'all' | 'unsynced' | 'critical' | 'trek'>('all')
+  const [showAllMessages, setShowAllMessages] = useState(false)
 
   const isMeshActive = useAppStore((state) => state.isMeshActive)
   const peerCount = useAppStore((state) => state.peerCount)
@@ -129,6 +130,7 @@ const MeshStatusScreen = ({ navigation }: MeshStatusScreenProps) => {
       : allMessages
 
   const activePeersFound = peerCount > 0
+  const visibleMessages = showAllMessages ? displayedMessages : displayedMessages.slice(0, 5)
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -240,44 +242,69 @@ const MeshStatusScreen = ({ navigation }: MeshStatusScreenProps) => {
         <View style={styles.filterRow}>
             <TouchableOpacity 
               style={[styles.filterBtn, activeTab === 'all' && styles.filterBtnActive]} 
-              onPress={() => setActiveTab('all')}
+              onPress={() => {
+                setActiveTab('all')
+                setShowAllMessages(false)
+              }}
             >
               <Text style={[styles.filterText, activeTab === 'all' && styles.filterTextActive]}>ALL</Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
               style={[styles.filterBtn, activeTab === 'unsynced' && styles.filterBtnActive]} 
-              onPress={() => setActiveTab('unsynced')}
+              onPress={() => {
+                setActiveTab('unsynced')
+                setShowAllMessages(false)
+              }}
             >
               <Text style={[styles.filterText, activeTab === 'unsynced' && styles.filterTextActive]}>UNSYNCED</Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
               style={[styles.filterBtn, styles.filterBtnCritical, activeTab === 'critical' && styles.filterBtnCriticalActive]}
-              onPress={() => setActiveTab('critical')}
+              onPress={() => {
+                setActiveTab('critical')
+                setShowAllMessages(false)
+              }}
             >
               <Text style={[styles.filterText, styles.filterTextCritical, activeTab === 'critical' && styles.filterTextCriticalActive]}>CRITICAL</Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
               style={[styles.filterBtn, activeTab === 'trek' && styles.filterBtnActive]} 
-              onPress={() => setActiveTab('trek')}
+              onPress={() => {
+                setActiveTab('trek')
+                setShowAllMessages(false)
+              }}
             >
               <Text style={[styles.filterText, activeTab === 'trek' && styles.filterTextActive]}>TREK</Text>
             </TouchableOpacity>
         </View>
 
         <View style={styles.messagesContainer}>
-           {displayedMessages.map(message => (
+           {visibleMessages.map(message => (
               <MessageCard key={message.message_id} message={message} />
            ))}
         </View>
 
+        {!showAllMessages && displayedMessages.length > 5 && (
+          <TouchableOpacity 
+            style={styles.seeMoreButton} 
+            onPress={() => setShowAllMessages(true)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.seeMoreText}>SEE ALL MESSAGES ({displayedMessages.length})</Text>
+            <MaterialCommunityIcons name="chevron-down" size={16} color="#182A6A" />
+          </TouchableOpacity>
+        )}
+
         {/* Bottom End indicator */}
-        <View style={styles.endIndicator}>
-           <MaterialCommunityIcons name="eye-off-outline" size={32} color="#B0BEC5" />
-           <Text style={styles.endIndicatorText}>NO OLDER MESSAGES IN QUEUE</Text>
-        </View>
+        {(showAllMessages || displayedMessages.length <= 5) && (
+          <View style={styles.endIndicator}>
+             <MaterialCommunityIcons name="eye-off-outline" size={32} color="#B0BEC5" />
+             <Text style={styles.endIndicatorText}>NO OLDER MESSAGES IN QUEUE</Text>
+          </View>
+        )}
 
       </ScrollView>
     </SafeAreaView>
@@ -626,13 +653,30 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#9E9E9E',
   },
+  seeMoreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EEF2FB',
+    borderRadius: 16,
+    paddingVertical: 16,
+    marginTop: 4,
+    marginBottom: 12,
+    gap: 6,
+  },
+  seeMoreText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#182A6A',
+    letterSpacing: 1,
+  },
   endIndicator: {
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#EEF2FB',
     borderRadius: 16,
     paddingVertical: 32,
-    marginTop: 12,
+    marginTop: 4,
     marginBottom: 12,
   },
   endIndicatorText: {

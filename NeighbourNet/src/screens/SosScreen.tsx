@@ -185,7 +185,11 @@ const SosScreen = () => {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent} 
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         {lastResult !== null && (
           <View style={[styles.resultBanner, { backgroundColor: PRIORITY_COLORS[lastResult.tier] }]}>
             <Text style={styles.resultText}>
@@ -451,7 +455,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingBottom: 240, // Increased to ensure the bottom inputs can scroll above the keyboard
   },
   resultBanner: {
     paddingVertical: 10,
