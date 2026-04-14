@@ -113,11 +113,20 @@ const MeshStatusScreen = ({ navigation }: MeshStatusScreenProps) => {
   }, [])
 
   const critical = messages.filter((message) => message.priority_tier === 'CRITICAL')
+  const trekMessages = messages.filter((message) => message.priority_tier === 'LOW' || message.body.toLowerCase().includes('trek'))
   const allMessages = messages
   const unsyncedMessages = messages.filter((message) => !message.synced)
 
   const displayedMessages =
-    activeTab === 'all' ? allMessages : activeTab === 'unsynced' ? unsyncedMessages : activeTab === 'critical' ? critical : allMessages
+    activeTab === 'all'
+      ? allMessages
+      : activeTab === 'unsynced'
+      ? unsyncedMessages
+      : activeTab === 'critical'
+      ? critical
+      : activeTab === 'trek'
+      ? trekMessages
+      : allMessages
 
   const activePeersFound = peerCount > 0
 
@@ -245,7 +254,7 @@ const MeshStatusScreen = ({ navigation }: MeshStatusScreenProps) => {
         </View>
 
         <View style={styles.messagesContainer}>
-           {displayedMessages.slice(0, 5).map(message => (
+           {displayedMessages.map(message => (
               <MessageCard key={message.message_id} message={message} />
            ))}
         </View>
