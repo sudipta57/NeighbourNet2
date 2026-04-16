@@ -36,8 +36,6 @@ const SosScreen = () => {
   const [lastResult, setLastResult] = useState<{ tier: PriorityTier; score: number } | null>(null)
   const [locationGranted, setLocationGranted] = useState(false)
 
-  // Decorative UI layout states
-  const [contextType, setContextType] = useState<'disaster' | 'trek'>('disaster')
   const [broadcastTarget, setBroadcastTarget] = useState<'Everyone' | 'Friends' | 'Directional'>('Everyone')
 
   const addMessage = useAppStore((state) => state.addMessage)
@@ -198,29 +196,7 @@ const SosScreen = () => {
           </View>
         )}
 
-        {/* Context Selector */}
-        <View style={styles.sectionMargin}>
-          <Text style={styles.sectionHeader}>SELECT CONTEXT</Text>
-          <View style={styles.contextRow}>
-            <TouchableOpacity 
-              style={[styles.contextBtn, contextType === 'disaster' && styles.contextBtnActive]}
-              onPress={() => setContextType('disaster')}
-            >
-              <MaterialCommunityIcons name="alert-circle" size={20} color={contextType === 'disaster' ? '#FFF' : '#4F5C7A'} />
-              <View style={styles.contextTxtWrap}>
-                 <Text style={[styles.contextTitle, contextType === 'disaster' && styles.contextTitleActive]}>Disaster</Text>
-              </View>
-            </TouchableOpacity>
 
-            <TouchableOpacity 
-               style={[styles.contextBtn, contextType === 'trek' && styles.contextBtnActive]}
-               onPress={() => setContextType('trek')}
-            >
-              <MaterialCommunityIcons name="hiking" size={20} color={contextType === 'trek' ? '#FFF' : '#4F5C7A'} />
-              <Text style={[styles.contextTitle, contextType === 'trek' && styles.contextTitleActive]}>Trek</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
 
         {/* Signal Strength */}
         <View style={styles.signalCard}>
@@ -239,6 +215,8 @@ const SosScreen = () => {
         {/* Quick Broadcast */}
         <View style={styles.sectionMargin}>
            <Text style={styles.sectionHeader}>QUICK BROADCAST</Text>
+
+           <Text style={styles.subCategoryHeader}>DISASTER & EMERGENCIES</Text>
            <View style={styles.gridRow}>
              <TouchableOpacity 
                style={[styles.gridCard, styles.gridCardTrapped, selectedTemplate === 0 && styles.gridCardSelected]}
@@ -263,35 +241,61 @@ const SosScreen = () => {
              </TouchableOpacity>
            </View>
 
+           <Text style={styles.subCategoryHeader}>TREK & OUTDOORS</Text>
            <View style={styles.gridRow}>
              <TouchableOpacity 
-               style={[styles.gridCard, styles.gridCardLight, selectedTemplate === 2 && styles.gridCardSelected]}
+               style={[styles.gridCard, styles.gridCardGreen, selectedTemplate === 2 && styles.gridCardSelected]}
                onPress={() => {
                  setSelectedTemplate(2)
                  setCustomText('')
                }}
              >
-               <MaterialCommunityIcons name="water" size={22} color="#182A6A" />
-               <Text style={styles.cardTitleBlue}>No Food/Water</Text>
+               <MaterialCommunityIcons name="map-marker-question" size={22} color="#2E7D32" />
+               <Text style={styles.cardTitleGreen}>Lost Trail</Text>
              </TouchableOpacity>
 
              <TouchableOpacity 
-               style={[styles.gridCard, styles.gridCardLight, selectedTemplate === 3 && styles.gridCardSelected]}
+               style={[styles.gridCard, styles.gridCardGreen, selectedTemplate === 3 && styles.gridCardSelected]}
                onPress={() => {
                  setSelectedTemplate(3)
                  setCustomText('')
                }}
              >
-               <MaterialCommunityIcons name="human-cane" size={22} color="#182A6A" />
-               <Text style={styles.cardTitleBlue}>Elderly</Text>
+               <MaterialCommunityIcons name="bandage" size={22} color="#2E7D32" />
+               <Text style={styles.cardTitleGreen}>Injured</Text>
+             </TouchableOpacity>
+           </View>
+
+           <Text style={styles.subCategoryHeader}>CONCERTS & EVENTS</Text>
+           <View style={styles.gridRow}>
+             <TouchableOpacity 
+               style={[styles.gridCard, styles.gridCardPurple, selectedTemplate === 4 && styles.gridCardSelected]}
+               onPress={() => {
+                 setSelectedTemplate(4)
+                 setCustomText('')
+               }}
+             >
+               <MaterialCommunityIcons name="account-search" size={22} color="#6A1B9A" />
+               <Text style={styles.cardTitlePurple}>Lost Friend</Text>
+             </TouchableOpacity>
+
+             <TouchableOpacity 
+               style={[styles.gridCard, styles.gridCardPurple, selectedTemplate === 5 && styles.gridCardSelected]}
+               onPress={() => {
+                 setSelectedTemplate(5)
+                 setCustomText('')
+               }}
+             >
+               <MaterialCommunityIcons name="account-group" size={22} color="#6A1B9A" />
+               <Text style={styles.cardTitlePurple}>Crowd Crush</Text>
              </TouchableOpacity>
            </View>
 
            {/* I am safe */}
            <TouchableOpacity 
-             style={[styles.safeButton, selectedTemplate === 4 && styles.safeButtonSelected]} 
+             style={[styles.safeButton, selectedTemplate === 6 && styles.safeButtonSelected]} 
              onPress={() => {
-               setSelectedTemplate(4)
+               setSelectedTemplate(6)
                setCustomText('')
              }}
            >
@@ -594,7 +598,32 @@ const styles = StyleSheet.create({
   cardSubtitleBlue: {
     color: '#4F5C7A',
     fontSize: 12,
-    marginTop: 2,
+  },
+  subCategoryHeader: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#182A6A',
+    marginBottom: 8,
+    marginTop: 4,
+    opacity: 0.8,
+  },
+  gridCardGreen: {
+    backgroundColor: '#E8F5E9',
+  },
+  cardTitleGreen: {
+    color: '#2E7D32',
+    fontSize: 14,
+    fontWeight: '800',
+    marginTop: 10,
+  },
+  gridCardPurple: {
+    backgroundColor: '#F3E5F5',
+  },
+  cardTitlePurple: {
+    color: '#6A1B9A',
+    fontSize: 14,
+    fontWeight: '800',
+    marginTop: 10,  
   },
   safeButton: {
     flexDirection: 'row',

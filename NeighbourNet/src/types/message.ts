@@ -47,9 +47,18 @@ export interface ChatMessage {
 }
 
 export const SOS_TEMPLATES = [
-  { label: 'Trapped, need boat' },
-  { label: 'Medical emergency' },
-  { label: 'No food or water' },
-  { label: 'Elderly, cannot move' },
-  { label: 'Safe, checking in' },
+  // Disaster
+  { label: 'Trapped, need help' }, // 0
+  { label: 'Medical emergency' }, // 1
+  
+  // Trek
+  { label: 'Lost trail, need directions' }, // 2
+  { label: 'Injured on trail' }, // 3
+
+  // Concerts
+  { label: 'Lost friend in crowd' }, // 4
+  { label: 'Crowd crush / dangerous' }, // 5
+
+  // Common
+  { label: 'Safe, checking in' }, // 6
 ];
