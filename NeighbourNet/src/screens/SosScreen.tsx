@@ -66,7 +66,7 @@ const SosScreen = () => {
     }
     if (selectedTemplate !== null) {
       const template = SOS_TEMPLATES[selectedTemplate]
-      return `${template.label} (${template.labelEn})`
+      return template.label
     }
     if (locationHint.trim().length > 0) {
       // Fallback if they didn't select a quick tile but typed something
@@ -200,7 +200,7 @@ const SosScreen = () => {
 
         {/* Context Selector */}
         <View style={styles.sectionMargin}>
-          <Text style={styles.sectionHeader}>SELECT CONTEXT <Text style={styles.sectionHeaderBn}>/ প্রেক্ষাপট নির্বাচন করুন</Text></Text>
+          <Text style={styles.sectionHeader}>SELECT CONTEXT</Text>
           <View style={styles.contextRow}>
             <TouchableOpacity 
               style={[styles.contextBtn, contextType === 'disaster' && styles.contextBtnActive]}
@@ -208,8 +208,7 @@ const SosScreen = () => {
             >
               <MaterialCommunityIcons name="alert-circle" size={20} color={contextType === 'disaster' ? '#FFF' : '#4F5C7A'} />
               <View style={styles.contextTxtWrap}>
-                 <Text style={[styles.contextTitle, contextType === 'disaster' && styles.contextTitleActive]}>Disaster /</Text>
-                 <Text style={[styles.contextTitleBn, contextType === 'disaster' && styles.contextTitleBnActive]}>দুর্যোগ</Text>
+                 <Text style={[styles.contextTitle, contextType === 'disaster' && styles.contextTitleActive]}>Disaster</Text>
               </View>
             </TouchableOpacity>
 
@@ -218,7 +217,7 @@ const SosScreen = () => {
                onPress={() => setContextType('trek')}
             >
               <MaterialCommunityIcons name="hiking" size={20} color={contextType === 'trek' ? '#FFF' : '#4F5C7A'} />
-              <Text style={[styles.contextTitle, contextType === 'trek' && styles.contextTitleActive]}>Trek / ভ্রমণ</Text>
+              <Text style={[styles.contextTitle, contextType === 'trek' && styles.contextTitleActive]}>Trek</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -239,7 +238,7 @@ const SosScreen = () => {
 
         {/* Quick Broadcast */}
         <View style={styles.sectionMargin}>
-           <Text style={styles.sectionHeader}>QUICK BROADCAST <Text style={styles.sectionHeaderBn}>/ দ্রুত বার্তা</Text></Text>
+           <Text style={styles.sectionHeader}>QUICK BROADCAST</Text>
            <View style={styles.gridRow}>
              <TouchableOpacity 
                style={[styles.gridCard, styles.gridCardTrapped, selectedTemplate === 0 && styles.gridCardSelected]}
@@ -250,7 +249,6 @@ const SosScreen = () => {
              >
                <MaterialCommunityIcons name="home-flood" size={22} color="#D32F2F" />
                <Text style={styles.cardTitleRed}>Trapped</Text>
-               <Text style={styles.cardSubtitleRed}>আটকে পড়েছি</Text>
              </TouchableOpacity>
 
              <TouchableOpacity 
@@ -262,7 +260,6 @@ const SosScreen = () => {
              >
                <MaterialCommunityIcons name="medical-bag" size={22} color="#182A6A" />
                <Text style={styles.cardTitleBlue}>Medical</Text>
-               <Text style={styles.cardSubtitleBlue}>চিকিৎসা প্রয়োজন</Text>
              </TouchableOpacity>
            </View>
 
@@ -276,7 +273,6 @@ const SosScreen = () => {
              >
                <MaterialCommunityIcons name="water" size={22} color="#182A6A" />
                <Text style={styles.cardTitleBlue}>No Food/Water</Text>
-               <Text style={styles.cardSubtitleBlue}>খাদ্য/জল নেই</Text>
              </TouchableOpacity>
 
              <TouchableOpacity 
@@ -288,7 +284,6 @@ const SosScreen = () => {
              >
                <MaterialCommunityIcons name="human-cane" size={22} color="#182A6A" />
                <Text style={styles.cardTitleBlue}>Elderly</Text>
-               <Text style={styles.cardSubtitleBlue}>বয়স্ক ব্যক্তি</Text>
              </TouchableOpacity>
            </View>
 
@@ -305,7 +300,7 @@ const SosScreen = () => {
                  <MaterialCommunityIcons name="check-bold" size={16} color="#004D40" />
                </View>
                <View>
-                 <Text style={styles.safeTitle}>I am Safe / আমি নিরাপদ</Text>
+                 <Text style={styles.safeTitle}>I am Safe</Text>
                  <Text style={styles.safeSubtitle}>Notify all nodes of your status</Text>
                </View>
              </View>
@@ -315,7 +310,7 @@ const SosScreen = () => {
 
         {/* Broadcast Target */}
         <View style={styles.sectionMargin}>
-           <Text style={styles.sectionHeader}>BROADCAST TARGET <Text style={styles.sectionHeaderBn}>/ সম্প্রচার লক্ষ্য</Text></Text>
+           <Text style={styles.sectionHeader}>BROADCAST TARGET</Text>
            <View style={styles.targetBar}>
               {['Everyone', 'Friends', 'Directional'].map((t) => (
                 <TouchableOpacity 
@@ -344,7 +339,7 @@ const SosScreen = () => {
         {/* Custom Message */}
         <View style={styles.sectionMargin}>
            <View style={styles.landmarkHeaderRow}>
-             <Text style={styles.sectionHeader}>CUSTOM MESSAGE <Text style={styles.sectionHeaderBn}>/ নিজে লিখুন</Text></Text>
+             <Text style={styles.sectionHeader}>CUSTOM MESSAGE</Text>
              <Text style={styles.charLimit}>{customText.length} / 500</Text>
            </View>
            
@@ -366,7 +361,7 @@ const SosScreen = () => {
         {/* Landmark & Details */}
         <View style={styles.sectionMargin}>
            <View style={styles.landmarkHeaderRow}>
-             <Text style={styles.sectionHeader}>LANDMARK & DETAILS <Text style={styles.sectionHeaderBn}>/ বিবরণ</Text></Text>
+             <Text style={styles.sectionHeader}>LANDMARK & DETAILS</Text>
              <Text style={styles.charLimit}>{locationHint.length} / 500</Text>
            </View>
            

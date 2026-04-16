@@ -47,9 +47,9 @@ export interface ChatMessage {
 }
 
 export const SOS_TEMPLATES = [
-  { label: 'আটকে পড়েছি, নৌকা দরকার', labelEn: 'Trapped, need boat' },
-  { label: 'চিকিৎসা জরুরি', labelEn: 'Medical emergency' },
-  { label: 'খাবার ও জল নেই', labelEn: 'No food or water' },
-  { label: 'বৃদ্ধ, সরতে পারছি না', labelEn: 'Elderly, cannot move' },
-  { label: 'আমি ঠিক আছি', labelEn: 'Safe, checking in' },
+  { label: 'Trapped, need boat' },
+  { label: 'Medical emergency' },
+  { label: 'No food or water' },
+  { label: 'Elderly, cannot move' },
+  { label: 'Safe, checking in' },
 ];

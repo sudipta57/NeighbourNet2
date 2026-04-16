@@ -95,7 +95,7 @@ function buildLeafletHtml(lat: number, lng: number): string {
           });
 
           var myMarker = L.marker([${lat}, ${lng}], { icon: meIcon }).addTo(map);
-          myMarker.bindPopup('<b>You / আপনি</b>');
+          myMarker.bindPopup('<b>You</b>');
 
           window.updateFriendMarkers = function(friends) {
             markerLayer.clearLayers();
@@ -276,19 +276,19 @@ const FriendMapScreen = ({ onBack }: FriendMapScreenProps) => {
             <MaterialCommunityIcons name="arrow-left" size={24} color="#182A6A" />
           </TouchableOpacity>
           <View style={styles.headerContent}>
-            <Text style={styles.title}>Friend Map / বন্ধু মানচিত্র</Text>
+            <Text style={styles.title}>Friend Map</Text>
             <Text style={styles.subtitle}>0 friends nearby</Text>
           </View>
         </View>
 
         <View style={styles.permissionCard}>
           <Text style={styles.permissionIcon}>📍</Text>
-          <Text style={styles.permissionTitle}>Location access needed / অবস্থান অনুমতি প্রয়োজন</Text>
+          <Text style={styles.permissionTitle}>Location access needed</Text>
           <Text style={styles.permissionSubtitle}>
             Required to share your location with friends over the mesh
           </Text>
           <TouchableOpacity onPress={() => void requestPermission()} style={styles.permissionButton}>
-            <Text style={styles.permissionButtonText}>Grant Permission / অনুমতি দিন</Text>
+            <Text style={styles.permissionButtonText}>Grant Permission</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -303,7 +303,7 @@ const FriendMapScreen = ({ onBack }: FriendMapScreenProps) => {
         </TouchableOpacity>
         <View style={styles.headerContent}>
           <View style={styles.titleRow}>
-            <Text style={styles.title}>Friend Map / বন্ধু মানচিত্র</Text>
+            <Text style={styles.title}>Friend Map</Text>
             <Animated.View style={[styles.liveDot, { opacity: pulse }]} />
           </View>
           <Text style={styles.subtitle}>{subtitle}</Text>
@@ -325,7 +325,7 @@ const FriendMapScreen = ({ onBack }: FriendMapScreenProps) => {
 
         {friendLocations.length === 0 ? (
           <View style={styles.emptyOverlay}>
-            <Text style={styles.emptyTitle}>No friends nearby / কোনো বন্ধু নেই</Text>
+            <Text style={styles.emptyTitle}>No friends nearby</Text>
             <Text style={styles.emptySubtitle}>
               Friends you connect with will appear here automatically
             </Text>

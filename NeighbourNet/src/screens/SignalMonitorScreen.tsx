@@ -51,14 +51,14 @@ function randomOffset(): number {
 
 function getSignalStatus(rssi: number): SignalStatus {
   if (rssi >= -60) {
-    return { label: 'Strong / শক্তিশালী', color: '#00c896' }
+    return { label: 'Strong', color: '#00c896' }
   }
 
   if (rssi >= -75) {
-    return { label: 'Good / ভালো', color: '#f5c542' }
+    return { label: 'Good', color: '#f5c542' }
   }
 
-  return { label: 'Weak / দুর্বল', color: '#ef5350' }
+  return { label: 'Weak', color: '#ef5350' }
 }
 
 function getFilledBars(rssi: number): number {
@@ -117,7 +117,7 @@ function mapMeshPeerToSignalPeer(peer: MeshPeerLike): Peer {
 const PeerSignalCard = ({ peer }: { peer: Peer }) => {
   const signalStatus = getSignalStatus(peer.rssi)
   const filledBars = getFilledBars(peer.rssi)
-  const hintText = peer.rssi < -75 ? 'Move closer / কাছে আসুন' : 'Good connection / ভালো সংযোগ'
+  const hintText = peer.rssi < -75 ? 'Move closer' : 'Good connection'
 
   return (
     <View style={styles.card}>
@@ -265,7 +265,7 @@ const SignalMonitorScreen = ({ navigation }: Props) => {
         <View style={styles.headerContent}>
           <View style={styles.titleRow}>
             <Text style={styles.title} numberOfLines={1}>
-              Signal Monitor / সংকেত মনিটর
+              Signal Monitor
             </Text>
             <Animated.View style={[styles.liveDot, { opacity: pulse }]} />
           </View>
@@ -281,7 +281,7 @@ const SignalMonitorScreen = ({ navigation }: Props) => {
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Text style={styles.emptyIcon}>📴</Text>
-            <Text style={styles.emptyTitle}>No peers nearby / কোনো পিয়ার নেই</Text>
+            <Text style={styles.emptyTitle}>No peers nearby</Text>
             <Text style={styles.emptySubtitle}>Move to an open area to find mesh nodes</Text>
           </View>
         }
