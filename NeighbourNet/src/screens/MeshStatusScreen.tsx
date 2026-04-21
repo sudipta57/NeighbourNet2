@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useState } from 'react'
+import React, { useEffect, useCallback, useState, useRef } from 'react'
 import {
   View,
   Text,
@@ -8,7 +8,9 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   StatusBar,
+  Animated,
 } from 'react-native'
+import * as Location from 'expo-location'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import useAppStore from '../store/useAppStore'
@@ -92,12 +94,57 @@ const MeshStatusScreen = ({ navigation }: MeshStatusScreenProps) => {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [activeTab, setActiveTab] = useState<'all' | 'unsynced' | 'critical' | 'trek'>('all')
   const [showAllMessages, setShowAllMessages] = useState(false)
+  const [compassDegree, setCompassDegree] = useState<number | null>(null)
 
   const isMeshActive = useAppStore((state) => state.isMeshActive)
   const peerCount = useAppStore((state) => state.peerCount)
   const queueDepth = useAppStore((state) => state.queueDepth)
   const messages = useAppStore((state) => state.messages)
   const currentPeers = useMeshStore((state) => state.currentPeers)
+
+  const headingAnim = useRef(new Animated.Value(0)).current
+  const cumulativeHeading = useRef(0)
+  const lastRawHeading = useRef<number | null>(null)
+
+  const compassRingRotate = headingAnim.interpolate({
+    inputRange: [-36000, 36000],
+    outputRange: ['-36000deg', '36000deg'],
+  })
+  const compassCounterRotate = headingAnim.interpolate({
+    inputRange: [-36000, 36000],
+    outputRange: ['36000deg', '-36000deg'],
+  })
+
+  useEffect(() => {
+    let headingSub: Location.LocationSubscription | null = null
+
+    const startCompass = async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync()
+      if (status !== 'granted') return
+      headingSub = await Location.watchHeadingAsync((hdg) => {
+        const raw = hdg.magHeading
+        if (lastRawHeading.current === null) {
+          // First reading — seed cumulative with the actual absolute heading
+          cumulativeHeading.current = raw
+        } else {
+          let delta = raw - lastRawHeading.current
+          if (delta > 180) delta -= 360
+          if (delta < -180) delta += 360
+          cumulativeHeading.current += delta
+        }
+        lastRawHeading.current = raw
+        setCompassDegree(Math.round(raw))
+        Animated.timing(headingAnim, {
+          toValue: -cumulativeHeading.current,
+          duration: 200,
+          useNativeDriver: true,
+        }).start()
+      })
+    }
+
+    void startCompass()
+    return () => { headingSub?.remove() }
+  }, [headingAnim])
 
   useEffect(() => {
     useAppStore.getState().refreshMessages()
@@ -134,6 +181,18 @@ const MeshStatusScreen = ({ navigation }: MeshStatusScreenProps) => {
   const activePeersFound = peerCount > 0
   const visibleMessages = showAllMessages ? displayedMessages : displayedMessages.slice(0, 5)
   const visualNodes = currentPeers.slice(0, 5)
+
+  const getCardinalLabel = (deg: number): string => {
+    const d = ((deg % 360) + 360) % 360
+    if (d < 22.5 || d >= 337.5) return 'N'
+    if (d < 67.5) return 'NE'
+    if (d < 112.5) return 'E'
+    if (d < 157.5) return 'SE'
+    if (d < 202.5) return 'S'
+    if (d < 247.5) return 'SW'
+    if (d < 292.5) return 'W'
+    return 'NW'
+  }
 
   const VISUAL_NODE_POSITIONS = [
     { top: -50, right: -20 },
@@ -197,35 +256,78 @@ const MeshStatusScreen = ({ navigation }: MeshStatusScreenProps) => {
 
         {/* Decorative Map */}
         <View style={styles.mapContainer}>
-             <View style={styles.radarOuter}>
-                <View style={styles.radarMiddle}>
-                   <View style={styles.radarInner}>
-                       <View style={styles.radarCenter}>
-                          <Ionicons name="person" size={18} color="#FFFFFF" />
-                       </View>
-                       
-                       {/* Dynamic Connected Nodes */}
-                       {visualNodes.map((peer, index) => {
-                         const pos = VISUAL_NODE_POSITIONS[index]
-                         const color = VISUAL_NODE_COLORS[index]
-                         const peerId = peer.id || (peer as any).endpointId || `node-${index}`
-                         const peerName = peerId.slice(-6).toUpperCase()
-                         const rssiText = peer.rssi ? `${Math.max(-100, Math.min(-40, peer.rssi))}dB` : 'MESH'
-                         
-                         return (
-                           <View key={peerId} style={[styles.node, pos]}>
-                              <View style={[styles.dynamicDot, { backgroundColor: color }]} />
-                              <Text style={[styles.dynamicNodeText, { color }]}>{peerName}</Text>
-                              <Text style={[styles.dynamicNodeRssi, { color }]}>{rssiText}</Text>
-                              <View style={styles.nodeIcon}>
-                                <MaterialCommunityIcons name="signal" size={12} color={color} />
-                              </View>
-                           </View>
-                         )
-                       })}
-                    </View>
+          <View style={styles.radarWrapper}>
+
+            {/* Compass Ring — rotates opposite to device heading so N always points north */}
+            <Animated.View
+              style={[styles.compassRing, { transform: [{ rotate: compassRingRotate }] }]}
+              pointerEvents="none"
+            >
+              {/* N */}
+              <Animated.View style={[styles.compassLabelN, { transform: [{ rotate: compassCounterRotate }] }]}>
+                <View style={styles.compassTickN} />
+                <Text style={styles.compassLabelNText}>N</Text>
+              </Animated.View>
+              {/* E */}
+              <Animated.View style={[styles.compassLabelE, { transform: [{ rotate: compassCounterRotate }] }]}>
+                <Text style={styles.compassLabelText}>E</Text>
+                <View style={styles.compassTickE} />
+              </Animated.View>
+              {/* S */}
+              <Animated.View style={[styles.compassLabelS, { transform: [{ rotate: compassCounterRotate }] }]}>
+                <Text style={styles.compassLabelText}>S</Text>
+                <View style={styles.compassTickS} />
+              </Animated.View>
+              {/* W */}
+              <Animated.View style={[styles.compassLabelW, { transform: [{ rotate: compassCounterRotate }] }]}>
+                <View style={styles.compassTickW} />
+                <Text style={styles.compassLabelText}>W</Text>
+              </Animated.View>
+            </Animated.View>
+
+            <View style={styles.radarOuter}>
+              <View style={styles.radarMiddle}>
+                <View style={styles.radarInner}>
+                  <View style={styles.radarCenter}>
+                    <Ionicons name="person" size={18} color="#FFFFFF" />
+                  </View>
+
+                  {/* Dynamic Connected Nodes */}
+                  {visualNodes.map((peer, index) => {
+                    const pos = VISUAL_NODE_POSITIONS[index]
+                    const color = VISUAL_NODE_COLORS[index]
+                    const peerId = peer.id || (peer as any).endpointId || `node-${index}`
+                    const peerName = peerId.slice(-6).toUpperCase()
+                    const rssiText = peer.rssi ? `${Math.max(-100, Math.min(-40, peer.rssi))}dB` : 'MESH'
+
+                    return (
+                      <View key={peerId} style={[styles.node, pos]}>
+                        <View style={[styles.dynamicDot, { backgroundColor: color }]} />
+                        <Text style={[styles.dynamicNodeText, { color }]}>{peerName}</Text>
+                        <Text style={[styles.dynamicNodeRssi, { color }]}>{rssiText}</Text>
+                        <View style={styles.nodeIcon}>
+                          <MaterialCommunityIcons name="signal" size={12} color={color} />
+                        </View>
+                      </View>
+                    )
+                  })}
                 </View>
-             </View>
+              </View>
+            </View>
+
+          </View>
+
+          {/* Heading degree display */}
+          <View style={styles.headingBadge}>
+            {compassDegree !== null ? (
+              <>
+                <Text style={styles.headingCardinal}>{getCardinalLabel(compassDegree)}</Text>
+                <Text style={styles.headingDegree}>{compassDegree}°</Text>
+              </>
+            ) : (
+              <Text style={styles.headingDegreeOff}>— °</Text>
+            )}
+          </View>
         </View>
 
         {/* Connected Peers Cards */}
@@ -406,10 +508,119 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   mapContainer: {
-    height: 300,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 10,
+  },
+  radarWrapper: {
+    width: 310,
+    height: 310,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  compassRing: {
+    position: 'absolute',
+    width: 310,
+    height: 310,
+    top: 0,
+    left: 0,
+  },
+  compassLabelN: {
+    position: 'absolute',
+    top: 2,
+    left: 145,
+    width: 20,
+    alignItems: 'center',
+  },
+  compassLabelE: {
+    position: 'absolute',
+    top: 145,
+    right: 2,
+    height: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  compassLabelS: {
+    position: 'absolute',
+    bottom: 2,
+    left: 145,
+    width: 20,
+    alignItems: 'center',
+  },
+  compassLabelW: {
+    position: 'absolute',
+    top: 145,
+    left: 2,
+    height: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  compassTickN: {
+    width: 2,
+    height: 6,
+    backgroundColor: '#D32F2F',
+    borderRadius: 1,
+    marginBottom: 2,
+  },
+  compassTickE: {
+    width: 6,
+    height: 2,
+    backgroundColor: '#7B88A0',
+    borderRadius: 1,
+    marginLeft: 2,
+  },
+  compassTickS: {
+    width: 2,
+    height: 6,
+    backgroundColor: '#7B88A0',
+    borderRadius: 1,
+    marginTop: 2,
+  },
+  compassTickW: {
+    width: 6,
+    height: 2,
+    backgroundColor: '#7B88A0',
+    borderRadius: 1,
+    marginRight: 2,
+  },
+  compassLabelNText: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#D32F2F',
+    letterSpacing: 0.5,
+  },
+  compassLabelText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#4F5C7A',
+    letterSpacing: 0.5,
+  },
+  headingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    backgroundColor: '#F0F3FA',
+    borderRadius: 20,
+  },
+  headingCardinal: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#7B88A0',
+    letterSpacing: 1,
+  },
+  headingDegree: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#0D1C4A',
+    letterSpacing: 0.5,
+  },
+  headingDegreeOff: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#B0BEC5',
   },
   radarOuter: {
     width: 280,
