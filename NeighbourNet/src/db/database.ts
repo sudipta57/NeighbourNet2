@@ -145,7 +145,7 @@ export function getUnsyncedMessages(): Message[] {
     created_at: string;
     last_hop_at: string;
     synced: number;
-  }>('SELECT * FROM messages WHERE synced = 0 ORDER BY priority_score DESC');
+  }>('SELECT * FROM messages WHERE synced = 0 ORDER BY priority_score DESC, created_at DESC');
 
   return results.map((row) => ({
     ...row,
@@ -201,7 +201,7 @@ export function getAllMessages(): Message[] {
     created_at: string;
     last_hop_at: string;
     synced: number;
-  }>('SELECT * FROM messages ORDER BY priority_score DESC');
+  }>('SELECT * FROM messages ORDER BY priority_score DESC, created_at DESC');
 
   return results.map((row) => ({
     ...row,

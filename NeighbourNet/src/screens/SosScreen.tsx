@@ -1,439 +1,795 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import {
-	View,
-	Text,
-	TouchableOpacity,
-	ScrollView,
-	TextInput,
-	StyleSheet,
-	Alert,
-	ActivityIndicator,
-	SafeAreaView,
-	StatusBar,
-	Vibration,
-	Platform,
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  TextInput,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  StatusBar,
+  Vibration,
+  Platform,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Location from 'expo-location'
 import { v4 as uuidv4 } from 'uuid'
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import useAppStore from '../store/useAppStore'
 import { broadcastMessage } from '../services/meshService'
 import { triggerManualSync } from '../services/gatewaySync'
 import { enqueuePendingMeshForward } from '../services/meshRelay'
 import { triageMessage } from '../services/triageEngine'
 import { SOS_TEMPLATES } from '../types/message'
-import {
-	PRIORITY_COLORS,
-	PRIORITY_LABELS,
-	INITIAL_TTL,
-} from '../constants/priorities'
+import { PRIORITY_COLORS, PRIORITY_LABELS, INITIAL_TTL } from '../constants/priorities'
 import { Message, PriorityTier } from '../types/message'
 
 const HARD_CODED_USER_ID = 'neighbournet-demo-user'
 
 const SosScreen = () => {
-	const [selectedTemplate, setSelectedTemplate] = useState<number | null>(null)
-	const [customText, setCustomText] = useState('')
-	const [locationHint, setLocationHint] = useState('')
-	const [isSending, setIsSending] = useState(false)
-	const [lastResult, setLastResult] = useState<{ tier: PriorityTier; score: number } | null>(null)
-	const [locationGranted, setLocationGranted] = useState(false)
+  const [selectedTemplate, setSelectedTemplate] = useState<number | null>(null)
+  const [customText, setCustomText] = useState('')
+  const [locationHint, setLocationHint] = useState('')
+  const [isSending, setIsSending] = useState(false)
+  const [lastResult, setLastResult] = useState<{ tier: PriorityTier; score: number } | null>(null)
+  const [locationGranted, setLocationGranted] = useState(false)
 
-	const addMessage = useAppStore((state) => state.addMessage)
-	const deviceId = useAppStore((state) => state.deviceId)
-	const queueDepth = useAppStore((state) => state.queueDepth)
+  const [broadcastTarget, setBroadcastTarget] = useState<'Everyone' | 'Friends' | 'Directional'>('Everyone')
 
-	useEffect(() => {
-		const requestLocationPermission = async () => {
-			const { status } = await Location.requestForegroundPermissionsAsync()
+  const addMessage = useAppStore((state) => state.addMessage)
 
-			if (status === 'granted') {
-				setLocationGranted(true)
-			} else {
-				setLocationGranted(false)
-				Alert.alert(
-					'Location Permission',
-					'Location not available. Your message will be sent without GPS coordinates.\nYou can add a text landmark instead.'
-				)
-			}
-		}
+  useEffect(() => {
+    const requestLocationPermission = async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync()
 
-		requestLocationPermission()
-	}, [])
+      if (status === 'granted') {
+        setLocationGranted(true)
+      } else {
+        setLocationGranted(false)
+        Alert.alert(
+          'Location Permission',
+          'Location not available. Your message will be sent without GPS coordinates.\nYou can add a text landmark instead.'
+        )
+      }
+    }
 
-	const getMessageBody = useCallback((): string => {
-		if (selectedTemplate !== null) {
-			const template = SOS_TEMPLATES[selectedTemplate]
-			return `${template.label} (${template.labelEn})`
-		}
+    requestLocationPermission()
+  }, [])
 
-		if (customText.trim().length > 0) {
-			return customText
-		}
+  const getMessageBody = useCallback((): string => {
+    if (customText.trim().length > 0) {
+      return customText.trim()
+    }
+    if (selectedTemplate !== null) {
+      const template = SOS_TEMPLATES[selectedTemplate]
+      return template.label
+    }
+    if (locationHint.trim().length > 0) {
+      // Fallback if they didn't select a quick tile but typed something
+      return `Custom SOS roughly at: ${locationHint}`
+    }
+    return ''
+  }, [customText, selectedTemplate, locationHint])
 
-		return ''
-	}, [selectedTemplate, customText])
+  const handleSendSOS = useCallback(async () => {
+    try {
+      const body = getMessageBody().trim()
 
-	const handleSendSOS = useCallback(async () => {
-		try {
-			const body = getMessageBody().trim()
+      if (!body) {
+        Alert.alert('Please select a Quick Broadcast option or type your location.')
+        return
+      }
 
-			if (!body) {
-				Alert.alert('Please select a template or type a message')
-				return
-			}
+      setIsSending(true)
+      Vibration.vibrate(100)
 
-			setIsSending(true)
-			Vibration.vibrate(100)
+      let lat: number | null = null
+      let lng: number | null = null
 
-			let lat: number | null = null
-			let lng: number | null = null
+      if (locationGranted) {
+        try {
+          const locationTimeout = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Location timeout')), 5000)
+          )
+          const position = await Promise.race([
+            Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+            locationTimeout,
+          ])
+          // @ts-ignore
+          lat = position.coords.latitude
+          // @ts-ignore
+          lng = position.coords.longitude
+        } catch (_error) {
+          lat = null
+          lng = null
+        }
+      }
 
-			if (locationGranted) {
-				try {
-					const locationTimeout = new Promise<never>((_, reject) =>
-						setTimeout(() => reject(new Error('Location timeout')), 5000)
-					)
-					const position = await Promise.race([
-						Location.getCurrentPositionAsync({
-							accuracy: Location.Accuracy.Balanced,
-						}),
-						locationTimeout,
-					])
-					lat = position.coords.latitude
-					lng = position.coords.longitude
-				} catch (_error) {
-					lat = null
-					lng = null
-				}
-			}
+      const { tier, priority_score } = await triageMessage(body)
+      const now = new Date().toISOString()
 
-			const { tier, priority_score } = await triageMessage(body)
-			const now = new Date().toISOString()
+      const message: Message = {
+        message_id: uuidv4(),
+        body,
+        sender_id: HARD_CODED_USER_ID,
+        message_type: 'sos',
+        gps_lat: lat,
+        gps_lng: lng,
+        location_hint: locationHint,
+        priority_score,
+        priority_tier: tier,
+        ttl: INITIAL_TTL,
+        hop_count: 0,
+        created_at: now,
+        last_hop_at: now,
+        synced: false,
+      }
 
-			const message: Message = {
-				message_id: uuidv4(),
-				body,
-				sender_id: HARD_CODED_USER_ID,
-				message_type: 'sos',
-				gps_lat: lat,
-				gps_lng: lng,
-				location_hint: locationHint,
-				priority_score,
-				priority_tier: tier,
-				ttl: INITIAL_TTL,
-				hop_count: 0,
-				created_at: now,
-				last_hop_at: now,
-				synced: false,
-			}
+      addMessage(message)
 
-			addMessage(message)
+      void triggerManualSync().catch((error) => {
+        console.error('Failed to trigger immediate gateway sync:', error)
+      })
 
-			void triggerManualSync().catch((error) => {
-				console.error('Failed to trigger immediate gateway sync:', error)
-			})
+      try {
+        const recipients = await broadcastMessage(message)
+        if (recipients <= 0) {
+          await enqueuePendingMeshForward(message.message_id)
+        }
+      } catch (error) {
+        console.error('Failed to broadcast SOS over mesh:', error)
+        await enqueuePendingMeshForward(message.message_id)
+      }
 
-			try {
-				const recipients = await broadcastMessage(message)
-				if (recipients <= 0) {
-					await enqueuePendingMeshForward(message.message_id)
-				}
-			} catch (error) {
-				console.error('Failed to broadcast SOS over mesh:', error)
-				await enqueuePendingMeshForward(message.message_id)
-			}
+      setLastResult({ tier, score: priority_score })
+      Vibration.vibrate(Platform.OS === 'ios' ? [0, 100, 50, 100] : [0, 100, 50, 100])
+      setIsSending(false)
 
-			setLastResult({ tier, score: priority_score })
-			Vibration.vibrate(Platform.OS === 'ios' ? [0, 100, 50, 100] : [0, 100, 50, 100])
-			setIsSending(false)
+      Alert.alert(
+        PRIORITY_LABELS[tier],
+        `Your SOS has been queued.\nPriority: ${tier}\nIt will be forwarded to nearby phones automatically.`
+      )
 
-			Alert.alert(
-				PRIORITY_LABELS[tier],
-				`Your SOS has been queued.\nPriority: ${tier}\nIt will be forwarded to nearby phones automatically.`
-			)
+      setSelectedTemplate(null)
+      setCustomText('')
+      setLocationHint('')
+    } catch (_error) {
+      setIsSending(false)
+      Alert.alert('Failed to send SOS. Please try again.')
+    }
+  }, [addMessage, getMessageBody, locationGranted, locationHint, customText])
 
-			setSelectedTemplate(null)
-			setCustomText('')
-		} catch (_error) {
-			setIsSending(false)
-			Alert.alert('Failed to send SOS. Please try again.')
-		}
-	}, [addMessage, getMessageBody, locationGranted, locationHint])
+  const isSendDisabled = isSending || getMessageBody().trim().length === 0
 
-	const isSendDisabled = isSending || getMessageBody().trim().length === 0
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <StatusBar barStyle="dark-content" backgroundColor="#FAFBFD" />
 
-	return (
-		<SafeAreaView style={styles.container}>
-			<StatusBar barStyle="light-content" backgroundColor="#000000" />
+      {/* Global Header */}
+      <View style={styles.appHeader}>
+        <View style={styles.headerLeftWrap}>
+          <MaterialCommunityIcons name="waves" size={24} color="#182A6A" />
+          <Text style={styles.appHeaderTitle}>NeighbourNet</Text>
+        </View>
+        <View style={styles.headerRightWrap}>
+          <View style={styles.offlinePill}>
+            <View style={styles.redDot} />
+            <Text style={styles.offlinePillText}>OFFLINE SOS</Text>
+          </View>
+          <Ionicons name="radio-outline" size={24} color="#182A6A" />
+        </View>
+      </View>
 
-			<View style={styles.header}>
-				<View>
-					<Text style={styles.appName}>NeighbourNet</Text>
-					<Text style={styles.subtitle}>Offline Mesh SOS</Text>
-				</View>
-				<View style={styles.queueBadge}>
-					<Text style={styles.queueCount}>{queueDepth}</Text>
-					<Text style={styles.queueLabel}>queued</Text>
-				</View>
-			</View>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent} 
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {lastResult !== null && (
+          <View style={[styles.resultBanner, { backgroundColor: PRIORITY_COLORS[lastResult.tier] }]}>
+            <Text style={styles.resultText}>
+              Last message: {PRIORITY_LABELS[lastResult.tier]} (score: {lastResult.score.toFixed(2)})
+            </Text>
+          </View>
+        )}
 
-			{lastResult !== null && (
-				<View style={[styles.resultBanner, { backgroundColor: PRIORITY_COLORS[lastResult.tier] }]}> 
-					<Text style={styles.resultText}>
-						Last message: {PRIORITY_LABELS[lastResult.tier]} (score: {lastResult.score.toFixed(2)})
-					</Text>
-				</View>
-			)}
 
-			<ScrollView contentContainerStyle={styles.contentContainer}>
-				<Text style={styles.sectionTitle}>Select situation / পরিস্থিতি বেছে নিন</Text>
-				{SOS_TEMPLATES.map((template, index) => {
-					const isSelected = selectedTemplate === index
-					return (
-						<TouchableOpacity
-							key={`${template.label}-${index}`}
-							style={[
-								styles.templateCard,
-								{
-									borderColor: isSelected ? '#C62828' : '#E0E0E0',
-									backgroundColor: isSelected ? '#FFEBEE' : '#FFFFFF',
-								},
-							]}
-							onPress={() => {
-								setSelectedTemplate(index)
-								setCustomText('')
-							}}
-							activeOpacity={0.8}
-						>
-							<View style={styles.templateTextWrap}>
-								<Text style={styles.templateLabel}>{template.label}</Text>
-								<Text style={styles.templateLabelEn}>{template.labelEn}</Text>
-							</View>
-							{isSelected && <Text style={styles.checkmark}>✓</Text>}
-						</TouchableOpacity>
-					)
-				})}
 
-				<View style={styles.orDividerContainer}>
-					<View style={styles.dividerLine} />
-					<Text style={styles.orText}>OR / অথবা</Text>
-					<View style={styles.dividerLine} />
-				</View>
+        {/* Signal Strength */}
+        <View style={styles.signalCard}>
+           <View>
+             <Text style={styles.signalSub}>MESH SIGNAL STRENGTH</Text>
+             <Text style={styles.signalTitle}>Active Node Connection</Text>
+           </View>
+           <View style={styles.barsWrap}>
+              <View style={[styles.signalBar, { height: 10 }]} />
+              <View style={[styles.signalBar, { height: 16 }]} />
+              <View style={[styles.signalBar, { height: 26 }]} />
+              <View style={[styles.signalBar, { height: 36 }]} />
+           </View>
+        </View>
 
-				<Text style={styles.sectionTitle}>Type your own message / নিজে লিখুন</Text>
-				<TextInput
-					style={styles.customInput}
-					placeholder="Describe your situation... (max 500 characters)"
-					multiline
-					maxLength={500}
-					value={customText}
-					onChangeText={(text) => {
-						setCustomText(text)
-						setSelectedTemplate(null)
-					}}
-					textAlignVertical="top"
-				/>
-				<Text style={styles.charCounter}>{customText.length}/500</Text>
+        {/* Quick Broadcast */}
+        <View style={styles.sectionMargin}>
+           <Text style={styles.sectionHeader}>QUICK BROADCAST</Text>
 
-				<Text style={styles.sectionTitle}>Landmark (optional) / কাছের জায়গার নাম</Text>
-				<TextInput
-					style={styles.locationInput}
-					placeholder="e.g. near Basirhat station, Block 4"
-					value={locationHint}
-					onChangeText={setLocationHint}
-				/>
-				<Text style={styles.locationHintText}>
-					{locationGranted
-						? '📍 GPS will be attached automatically'
-						: '⚠️ No GPS — please describe your location above'}
-				</Text>
+           <Text style={styles.subCategoryHeader}>DISASTER & EMERGENCIES</Text>
+           <View style={styles.gridRow}>
+             <TouchableOpacity 
+               style={[styles.gridCard, styles.gridCardTrapped, selectedTemplate === 0 && styles.gridCardSelected]}
+               onPress={() => {
+                 setSelectedTemplate(0)
+                 setCustomText('')
+               }}
+             >
+               <MaterialCommunityIcons name="home-flood" size={22} color="#D32F2F" />
+               <Text style={styles.cardTitleRed}>Trapped</Text>
+             </TouchableOpacity>
 
-				<TouchableOpacity
-					style={[styles.sendButton, isSendDisabled && styles.sendButtonDisabled]}
-					onPress={handleSendSOS}
-					disabled={isSendDisabled}
-					activeOpacity={0.85}
-				>
-					{isSending ? (
-						<ActivityIndicator color="#FFFFFF" size="small" />
-					) : (
-						<>
-							<Text style={styles.sendButtonTitle}>SEND SOS</Text>
-							<Text style={styles.sendButtonSubtitle}>সাহায্যের জন্য পাঠান</Text>
-						</>
-					)}
-				</TouchableOpacity>
-			</ScrollView>
-		</SafeAreaView>
-	)
+             <TouchableOpacity 
+               style={[styles.gridCard, styles.gridCardBlue, selectedTemplate === 1 && styles.gridCardSelected]}
+               onPress={() => {
+                 setSelectedTemplate(1)
+                 setCustomText('')
+               }}
+             >
+               <MaterialCommunityIcons name="medical-bag" size={22} color="#182A6A" />
+               <Text style={styles.cardTitleBlue}>Medical</Text>
+             </TouchableOpacity>
+           </View>
+
+           <Text style={styles.subCategoryHeader}>TREK & OUTDOORS</Text>
+           <View style={styles.gridRow}>
+             <TouchableOpacity 
+               style={[styles.gridCard, styles.gridCardGreen, selectedTemplate === 2 && styles.gridCardSelected]}
+               onPress={() => {
+                 setSelectedTemplate(2)
+                 setCustomText('')
+               }}
+             >
+               <MaterialCommunityIcons name="map-marker-question" size={22} color="#2E7D32" />
+               <Text style={styles.cardTitleGreen}>Lost Trail</Text>
+             </TouchableOpacity>
+
+             <TouchableOpacity 
+               style={[styles.gridCard, styles.gridCardGreen, selectedTemplate === 3 && styles.gridCardSelected]}
+               onPress={() => {
+                 setSelectedTemplate(3)
+                 setCustomText('')
+               }}
+             >
+               <MaterialCommunityIcons name="bandage" size={22} color="#2E7D32" />
+               <Text style={styles.cardTitleGreen}>Injured</Text>
+             </TouchableOpacity>
+           </View>
+
+           <Text style={styles.subCategoryHeader}>CONCERTS & EVENTS</Text>
+           <View style={styles.gridRow}>
+             <TouchableOpacity 
+               style={[styles.gridCard, styles.gridCardPurple, selectedTemplate === 4 && styles.gridCardSelected]}
+               onPress={() => {
+                 setSelectedTemplate(4)
+                 setCustomText('')
+               }}
+             >
+               <MaterialCommunityIcons name="account-search" size={22} color="#6A1B9A" />
+               <Text style={styles.cardTitlePurple}>Lost Friend</Text>
+             </TouchableOpacity>
+
+             <TouchableOpacity 
+               style={[styles.gridCard, styles.gridCardPurple, selectedTemplate === 5 && styles.gridCardSelected]}
+               onPress={() => {
+                 setSelectedTemplate(5)
+                 setCustomText('')
+               }}
+             >
+               <MaterialCommunityIcons name="account-group" size={22} color="#6A1B9A" />
+               <Text style={styles.cardTitlePurple}>Crowd Crush</Text>
+             </TouchableOpacity>
+           </View>
+
+           {/* I am safe */}
+           <TouchableOpacity 
+             style={[styles.safeButton, selectedTemplate === 6 && styles.safeButtonSelected]} 
+             onPress={() => {
+               setSelectedTemplate(6)
+               setCustomText('')
+             }}
+           >
+             <View style={styles.safeLeft}>
+               <View style={styles.safeIconWrap}>
+                 <MaterialCommunityIcons name="check-bold" size={16} color="#004D40" />
+               </View>
+               <View>
+                 <Text style={styles.safeTitle}>I am Safe</Text>
+                 <Text style={styles.safeSubtitle}>Notify all nodes of your status</Text>
+               </View>
+             </View>
+             <MaterialCommunityIcons name="arrow-right" size={20} color="#1FD8A4" />
+           </TouchableOpacity>
+        </View>
+
+        {/* Broadcast Target */}
+        <View style={styles.sectionMargin}>
+           <Text style={styles.sectionHeader}>BROADCAST TARGET</Text>
+           <View style={styles.targetBar}>
+              {['Everyone', 'Friends', 'Directional'].map((t) => (
+                <TouchableOpacity 
+                  key={t}
+                  style={[styles.targetBtn, broadcastTarget === t && styles.targetBtnActive]}
+                  onPress={() => setBroadcastTarget(t as any)}
+                >
+                  <Text style={[styles.targetTxt, broadcastTarget === t && styles.targetTxtActive]}>{t}</Text>
+                </TouchableOpacity>
+              ))}
+           </View>
+
+           {/* Decorative scanning dial */}
+           <View style={styles.dialWrap}>
+             <Text style={styles.dialNorth}>N</Text>
+             <View style={styles.dialCircle}>
+               <View style={styles.dialNeedleWrap}>
+                 <View style={styles.dialCenterDot} />
+                 <View style={styles.dialNeedle} />
+               </View>
+             </View>
+             <Text style={styles.dialStatus}>SCANNING 310° NW</Text>
+           </View>
+        </View>
+
+        {/* Custom Message */}
+        <View style={styles.sectionMargin}>
+           <View style={styles.landmarkHeaderRow}>
+             <Text style={styles.sectionHeader}>CUSTOM MESSAGE</Text>
+             <Text style={styles.charLimit}>{customText.length} / 500</Text>
+           </View>
+           
+           <TextInput
+             style={styles.landmarkInput}
+             placeholder="Describe your situation... (max 500 characters)"
+             placeholderTextColor="#90A4AE"
+             multiline
+             maxLength={500}
+             value={customText}
+             onChangeText={(t) => {
+               setCustomText(t)
+               setSelectedTemplate(null)
+             }}
+             textAlignVertical="top"
+           />
+        </View>
+
+        {/* Landmark & Details */}
+        <View style={styles.sectionMargin}>
+           <View style={styles.landmarkHeaderRow}>
+             <Text style={styles.sectionHeader}>LANDMARK & DETAILS</Text>
+             <Text style={styles.charLimit}>{locationHint.length} / 500</Text>
+           </View>
+           
+           <TextInput
+             style={styles.landmarkInput}
+             placeholder="Describe your location or landmarks nearby... (e.g., Near the red temple)"
+             placeholderTextColor="#90A4AE"
+             multiline
+             maxLength={500}
+             value={locationHint}
+             onChangeText={(t) => setLocationHint(t)}
+             textAlignVertical="top"
+           />
+        </View>
+
+        {/* Submit */}
+        <TouchableOpacity 
+          style={[styles.sendButton, isSendDisabled && styles.sendButtonDisabled]}
+          onPress={handleSendSOS}
+          disabled={isSendDisabled}
+        >
+          {isSending ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <View style={styles.sendLayout}>
+               <MaterialCommunityIcons name="bullhorn" size={24} color="#FFF" />
+               <Text style={styles.sendButtonText}>BROADCAST SOS</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+
+      </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  )
 }
 
 const styles = StyleSheet.create({
-	container: {
-		flex: 1,
-		backgroundColor: '#F5F5F5',
-	},
-	header: {
-		backgroundColor: '#1A237E',
-		padding: 16,
-		flexDirection: 'row',
-		justifyContent: 'space-between',
-		alignItems: 'center',
-	},
-	appName: {
-		color: '#FFFFFF',
-		fontSize: 22,
-		fontWeight: '700',
-	},
-	subtitle: {
-		color: '#B0BEC5',
-		fontSize: 13,
-		marginTop: 2,
-	},
-	queueBadge: {
-		backgroundColor: '#FFFFFF',
-		paddingHorizontal: 12,
-		paddingVertical: 8,
-		borderRadius: 14,
-		alignItems: 'center',
-		minWidth: 72,
-	},
-	queueCount: {
-		color: '#1A237E',
-		fontSize: 18,
-		fontWeight: '700',
-		lineHeight: 20,
-	},
-	queueLabel: {
-		color: '#616161',
-		fontSize: 11,
-		marginTop: 2,
-	},
-	resultBanner: {
-		width: '100%',
-		paddingVertical: 10,
-		paddingHorizontal: 12,
-	},
-	resultText: {
-		color: '#FFFFFF',
-		textAlign: 'center',
-		fontSize: 14,
-		fontWeight: '600',
-	},
-	contentContainer: {
-		paddingTop: 16,
-		paddingHorizontal: 16,
-		paddingBottom: 24,
-	},
-	sectionTitle: {
-		fontSize: 16,
-		fontWeight: '700',
-		color: '#212121',
-		marginBottom: 10,
-		marginTop: 8,
-	},
-	templateCard: {
-		borderWidth: 1,
-		borderRadius: 10,
-		padding: 14,
-		marginBottom: 10,
-		flexDirection: 'row',
-		alignItems: 'center',
-		justifyContent: 'space-between',
-	},
-	templateTextWrap: {
-		flex: 1,
-		paddingRight: 8,
-	},
-	templateLabel: {
-		fontSize: 18,
-		fontWeight: '700',
-		color: '#212121',
-	},
-	templateLabelEn: {
-		marginTop: 4,
-		fontSize: 13,
-		color: '#757575',
-	},
-	checkmark: {
-		color: '#C62828',
-		fontSize: 22,
-		fontWeight: '700',
-	},
-	orDividerContainer: {
-		flexDirection: 'row',
-		alignItems: 'center',
-		marginVertical: 16,
-	},
-	dividerLine: {
-		flex: 1,
-		height: 1,
-		backgroundColor: '#D0D0D0',
-	},
-	orText: {
-		marginHorizontal: 10,
-		color: '#757575',
-		fontSize: 13,
-		fontWeight: '600',
-	},
-	customInput: {
-		height: 100,
-		borderWidth: 1,
-		borderColor: '#E0E0E0',
-		borderRadius: 8,
-		backgroundColor: '#FFFFFF',
-		paddingHorizontal: 12,
-		paddingVertical: 10,
-		fontSize: 15,
-		color: '#212121',
-	},
-	charCounter: {
-		marginTop: 6,
-		marginBottom: 8,
-		textAlign: 'right',
-		color: '#757575',
-		fontSize: 12,
-	},
-	locationInput: {
-		borderWidth: 1,
-		borderColor: '#E0E0E0',
-		borderRadius: 8,
-		backgroundColor: '#FFFFFF',
-		paddingHorizontal: 12,
-		paddingVertical: 10,
-		fontSize: 15,
-		color: '#212121',
-	},
-	locationHintText: {
-		marginTop: 8,
-		color: '#757575',
-		fontSize: 12,
-		marginBottom: 10,
-	},
-	sendButton: {
-		margin: 20,
-		marginTop: 24,
-		height: 70,
-		borderRadius: 12,
-		backgroundColor: '#C62828',
-		justifyContent: 'center',
-		alignItems: 'center',
-	},
-	sendButtonDisabled: {
-		opacity: 0.5,
-	},
-	sendButtonTitle: {
-		color: '#FFFFFF',
-		fontSize: 20,
-		fontWeight: '800',
-		lineHeight: 24,
-	},
-	sendButtonSubtitle: {
-		color: '#FFCDD2',
-		fontSize: 13,
-		marginTop: 4,
-		fontWeight: '600',
-	},
+  container: {
+    flex: 1,
+    backgroundColor: '#FAFBFD',
+  },
+  appHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 16,
+  },
+  headerLeftWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  appHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#182A6A',
+  },
+  headerRightWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  offlinePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFEBEE',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 16,
+    gap: 6,
+  },
+  redDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#D32F2F',
+  },
+  offlinePillText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#D32F2F',
+    letterSpacing: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 240, // Increased to ensure the bottom inputs can scroll above the keyboard
+  },
+  resultBanner: {
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  resultText: {
+    color: '#FFFFFF',
+    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  sectionMargin: {
+    marginBottom: 24,
+  },
+  sectionHeader: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1,
+    color: '#7B88A0',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+  },
+  sectionHeaderBn: {
+    fontWeight: '400',
+    fontSize: 11,
+  },
+  contextRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  contextBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F0F3FA',
+    paddingVertical: 16,
+    borderRadius: 12,
+    gap: 10,
+  },
+  contextBtnActive: {
+    backgroundColor: '#0D1C4A',
+  },
+  contextTxtWrap: {
+    alignItems: 'center',
+  },
+  contextTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#4F5C7A',
+  },
+  contextTitleActive: {
+    color: '#FFFFFF',
+  },
+  contextTitleBn: {
+    fontSize: 14,
+    color: '#4F5C7A',
+  },
+  contextTitleBnActive: {
+    color: '#FFFFFF',
+  },
+  signalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+    shadowColor: '#0A1C4F',
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  signalSub: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#A0ADC9',
+    letterSpacing: 1.2,
+    marginBottom: 4,
+  },
+  signalTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#000',
+  },
+  barsWrap: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 4,
+    height: 36,
+  },
+  signalBar: {
+    width: 6,
+    backgroundColor: '#4FB99F',
+    borderRadius: 3,
+    opacity: 0.8,
+  },
+  gridRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  gridCard: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  gridCardSelected: {
+    borderColor: '#4FB99F', // highlight color
+  },
+  gridCardTrapped: {
+    backgroundColor: '#FFEAE9',
+  },
+  gridCardBlue: {
+    backgroundColor: '#E4EBFC',
+  },
+  gridCardLight: {
+    backgroundColor: '#EAEFF9',
+  },
+  cardTitleRed: {
+    color: '#D32F2F',
+    fontSize: 14,
+    fontWeight: '800',
+    marginTop: 10,
+  },
+  cardSubtitleRed: {
+    color: '#D32F2F',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  cardTitleBlue: {
+    color: '#182A6A',
+    fontSize: 14,
+    fontWeight: '800',
+    marginTop: 10,
+  },
+  cardSubtitleBlue: {
+    color: '#4F5C7A',
+    fontSize: 12,
+  },
+  subCategoryHeader: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#182A6A',
+    marginBottom: 8,
+    marginTop: 4,
+    opacity: 0.8,
+  },
+  gridCardGreen: {
+    backgroundColor: '#E8F5E9',
+  },
+  cardTitleGreen: {
+    color: '#2E7D32',
+    fontSize: 14,
+    fontWeight: '800',
+    marginTop: 10,
+  },
+  gridCardPurple: {
+    backgroundColor: '#F3E5F5',
+  },
+  cardTitlePurple: {
+    color: '#6A1B9A',
+    fontSize: 14,
+    fontWeight: '800',
+    marginTop: 10,  
+  },
+  safeButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#004D40',
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 4,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  safeButtonSelected: {
+    borderColor: '#1FD8A4',
+  },
+  safeLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  safeIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#1FD8A4',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  safeTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  safeSubtitle: {
+    color: '#80CBC4',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  targetBar: {
+    flexDirection: 'row',
+    backgroundColor: '#F0F3FA',
+    borderRadius: 16,
+    padding: 4,
+  },
+  targetBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: 12,
+  },
+  targetBtnActive: {
+    backgroundColor: '#0D1C4A',
+  },
+  targetTxt: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#4F5C7A',
+  },
+  targetTxtActive: {
+    color: '#FFFFFF',
+  },
+  dialWrap: {
+    marginTop: 24,
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#F0F3FA',
+  },
+  dialNorth: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#7B88A0',
+    marginBottom: -4,
+    zIndex: 10,
+    backgroundColor: '#FFF',
+    paddingHorizontal: 4,
+  },
+  dialCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 2,
+    borderColor: '#E8EDF9',
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dialNeedleWrap: {
+    position: 'absolute',
+    width: 80,
+    height: 80,
+    alignItems: 'center',
+    transform: [{ rotate: '-50deg' }], // points NW roughly 310 deg
+  },
+  dialCenterDot: {
+    position: 'absolute',
+    top: 36,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#0D1C4A',
+  },
+  dialNeedle: {
+    position: 'absolute',
+    top: 16,
+    width: 3,
+    height: 24,
+    backgroundColor: '#182A6A',
+    borderTopLeftRadius: 2,
+    borderTopRightRadius: 2,
+  },
+  dialStatus: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#2855F4',
+    marginTop: 16,
+    letterSpacing: 1.2,
+  },
+  landmarkHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  charLimit: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#A0ADC9',
+  },
+  landmarkInput: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    minHeight: 120,
+    padding: 16,
+    fontSize: 14,
+    color: '#182A6A',
+    borderWidth: 1,
+    borderColor: '#F0F3FA',
+  },
+  sendButton: {
+    backgroundColor: '#AA1B1B', // Dark red
+    borderRadius: 16,
+    height: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#AA1B1B',
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  sendLayout: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  sendButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  sendButtonDisabled: {
+    opacity: 0.5,
+  },
 })
 
 export default SosScreen

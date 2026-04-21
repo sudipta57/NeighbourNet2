@@ -4,13 +4,13 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { v4 as uuidv4 } from 'uuid'
 import { ChatMessage, Message } from '../types/message'
@@ -281,9 +281,9 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
   return (
     <KeyboardAvoidingView
       style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <SafeAreaView style={styles.root}>
+      <SafeAreaView style={styles.root} edges={['top']}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity

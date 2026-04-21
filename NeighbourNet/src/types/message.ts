@@ -47,9 +47,18 @@ export interface ChatMessage {
 }
 
 export const SOS_TEMPLATES = [
-  { label: 'আটকে পড়েছি, নৌকা দরকার', labelEn: 'Trapped, need boat' },
-  { label: 'চিকিৎসা জরুরি', labelEn: 'Medical emergency' },
-  { label: 'খাবার ও জল নেই', labelEn: 'No food or water' },
-  { label: 'বৃদ্ধ, সরতে পারছি না', labelEn: 'Elderly, cannot move' },
-  { label: 'আমি ঠিক আছি', labelEn: 'Safe, checking in' },
+  // Disaster
+  { label: 'Trapped, need help' }, // 0
+  { label: 'Medical emergency' }, // 1
+  
+  // Trek
+  { label: 'Lost trail, need directions' }, // 2
+  { label: 'Injured on trail' }, // 3
+
+  // Concerts
+  { label: 'Lost friend in crowd' }, // 4
+  { label: 'Crowd crush / dangerous' }, // 5
+
+  // Common
+  { label: 'Safe, checking in' }, // 6
 ];

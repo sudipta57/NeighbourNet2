@@ -48,12 +48,6 @@ function textToSimpleVector(text: string): number[] {
     'emergency',
     'unconscious',
     'critical',
-    'আটকে',
-    'জরুরি',
-    'সাহায্য',
-    'উদ্ধার',
-    'নৌকা',
-    'বিপদ',
   ];
 
   const highKeywords = [
@@ -63,13 +57,9 @@ function textToSimpleVector(text: string): number[] {
     'family',
     'children',
     'rising',
-    'খাবার',
-    'জল',
-    'পরিবার',
-    'বাড়ছে',
   ];
 
-  const lowKeywords = ['safe', 'okay', 'fine', 'checking', 'ঠিক', 'আছি'];
+  const lowKeywords = ['safe', 'okay', 'fine', 'checking'];
 
   criticalKeywords.forEach((keyword) => {
     if (lowerText.includes(keyword)) {

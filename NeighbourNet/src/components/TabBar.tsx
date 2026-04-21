@@ -1,5 +1,7 @@
 import React from 'react'
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 interface TabBarProps {
   activeTab: 'sos' | 'mesh' | 'friends' | 'profile'
@@ -8,70 +10,66 @@ interface TabBarProps {
 }
 
 const TabBar = ({ activeTab, onTabChange, criticalCount }: TabBarProps) => {
+  const insets = useSafeAreaInsets()
+  const paddingBottom = Platform.OS === 'ios' ? Math.max(20, insets.bottom) : Math.max(10, insets.bottom)
+  const height = 55 + paddingBottom
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom, height }]}>
       <TouchableOpacity style={styles.tabButton} onPress={() => onTabChange('sos')} activeOpacity={0.8}>
         <View style={styles.iconWrap}>
-          <Text style={[styles.icon, activeTab === 'sos' ? styles.sosActive : styles.inactive]}>🆘</Text>
+          <MaterialCommunityIcons 
+            name="alert-octagon-outline" 
+            size={24} 
+            color={activeTab === 'sos' ? '#182A6A' : '#8B99B8'} 
+          />
           {criticalCount > 0 ? (
             <View style={styles.criticalBadge}>
               <Text style={styles.badgeText}>{criticalCount}</Text>
             </View>
           ) : null}
         </View>
-        <Text
-          style={[
-            styles.label,
-            activeTab === 'sos' ? styles.sosActive : styles.inactive,
-            activeTab === 'sos' ? styles.bold : null,
-          ]}
-        >
+        <Text style={[styles.label, activeTab === 'sos' ? styles.activeText : styles.inactiveText]}>
           SOS
         </Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.tabButton} onPress={() => onTabChange('mesh')} activeOpacity={0.8}>
-        <View style={styles.iconWrap}>
-          <Text style={[styles.icon, activeTab === 'mesh' ? styles.meshActive : styles.inactive]}>📡</Text>
+        <View style={[styles.iconWrap, activeTab === 'mesh' ? styles.activeIconBg : null]}>
+          <MaterialCommunityIcons 
+            name="webpack" 
+            size={24} 
+            color={activeTab === 'mesh' ? '#182A6A' : '#8B99B8'} 
+          />
         </View>
-        <Text
-          style={[
-            styles.label,
-            activeTab === 'mesh' ? styles.meshActive : styles.inactive,
-            activeTab === 'mesh' ? styles.bold : null,
-          ]}
-        >
-          Mesh
+        <Text style={[styles.label, activeTab === 'mesh' ? styles.activeText : styles.inactiveText]}>
+          MESH
         </Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.tabButton} onPress={() => onTabChange('friends')} activeOpacity={0.8}>
         <View style={styles.iconWrap}>
-          <Text style={[styles.icon, activeTab === 'friends' ? styles.friendsActive : styles.inactive]}>👥</Text>
+          <Ionicons 
+            name="people-outline" 
+            size={24} 
+            color={activeTab === 'friends' ? '#182A6A' : '#8B99B8'} 
+          />
         </View>
-        <Text
-          style={[
-            styles.label,
-            activeTab === 'friends' ? styles.friendsActive : styles.inactive,
-            activeTab === 'friends' ? styles.bold : null,
-          ]}
-        >
-          Friends
+        <Text style={[styles.label, activeTab === 'friends' ? styles.activeText : styles.inactiveText]}>
+          FRIENDS
         </Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.tabButton} onPress={() => onTabChange('profile')} activeOpacity={0.8}>
-        <View style={styles.iconWrap}>
-          <Text style={[styles.icon, activeTab === 'profile' ? styles.profileActive : styles.inactive]}>👤</Text>
+        <View style={[styles.iconWrap, activeTab === 'profile' ? styles.activeIconBg : null]}>
+          <Ionicons 
+            name="person-outline" 
+            size={22} 
+            color={activeTab === 'profile' ? '#182A6A' : '#8B99B8'} 
+          />
         </View>
-        <Text
-          style={[
-            styles.label,
-            activeTab === 'profile' ? styles.profileActive : styles.inactive,
-            activeTab === 'profile' ? styles.bold : null,
-          ]}
-        >
-          Profile
+        <Text style={[styles.label, activeTab === 'profile' ? styles.activeText : styles.inactiveText]}>
+          PROFILE
         </Text>
       </TouchableOpacity>
     </View>
@@ -81,65 +79,56 @@ const TabBar = ({ activeTab, onTabChange, criticalCount }: TabBarProps) => {
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FAFCFF',
+    alignItems: 'center',
+    justifyContent: 'space-around',
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
-    height: 60,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: Platform.OS === 'ios' ? 0.1 : 0,
-    shadowRadius: Platform.OS === 'ios' ? 4 : 0,
-    elevation: 8,
+    borderTopColor: '#E8EDF9',
   },
   tabButton: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    height: '100%',
+    paddingTop: 8,
   },
   iconWrap: {
     position: 'relative',
+    padding: 6,
+    borderRadius: 14,
+    marginBottom: 4,
   },
-  icon: {
-    fontSize: 24,
+  activeIconBg: {
+    backgroundColor: '#E4ECFD',
   },
   label: {
-    marginTop: 2,
-    fontSize: 12,
-  },
-  sosActive: {
-    color: '#C62828',
-  },
-  meshActive: {
-    color: '#00897B',
-  },
-  friendsActive: {
-    color: '#1A237E',
-  },
-  profileActive: {
-    color: '#283593',
-  },
-  inactive: {
-    color: '#9E9E9E',
-  },
-  bold: {
+    fontSize: 10,
     fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  activeText: {
+    color: '#65789A',
+  },
+  inactiveText: {
+    color: '#A0ADC9',
   },
   criticalBadge: {
     position: 'absolute',
-    top: -6,
-    right: -12,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: '#C62828',
-    paddingHorizontal: 4,
+    top: -2,
+    right: -4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#E53935',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FAFCFF',
   },
   badgeText: {
     color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '700',
+    fontSize: 9,
+    fontWeight: '800',
   },
 })
 
