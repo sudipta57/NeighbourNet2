@@ -288,3 +288,10 @@ Verify peer count rises above 0.
 Send a message while offline, then enable internet on one device and confirm queue drains without repeated red-box errors. -->
 
 <!-- hey now the mesh is working perfect, but the sos are not uploading , it fails, can you -->
+
+
+
+<!-- For future updates (offline install flow):
+
+cd android && ./gradlew assembleRelease
+adb install -r app/build/outputs/apk/release/app-release.apk -->
