@@ -1,5 +1,7 @@
 import 'react-native-get-random-values'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+import * as Speech from 'expo-speech'
+import Vosk from 'react-native-vosk'
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -62,8 +64,61 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
   const [inputText, setInputText] = useState('')
   const [myDeviceId, setMyDeviceId] = useState<string | null>(null)
   const [myDisplayName, setMyDisplayName] = useState('')
+  const [isListening, setIsListening] = useState(false)
+  const voskLoaded = useRef(false)
 
   const flatListRef = useRef<FlatList<ChatMessage>>(null)
+
+  // Initialize Vosk Model
+  useEffect(() => {
+    Vosk.loadModel('model-en').then(() => {
+      console.log('[Chat] Vosk model loaded')
+      voskLoaded.current = true
+    }).catch(e => console.log('[Chat] Vosk load error:', e))
+
+    return () => {
+      if (voskLoaded.current) {
+        Vosk.unload()
+      }
+    }
+  }, [])
+
+  const toggleListening = async () => {
+    if (!voskLoaded.current) {
+      console.warn('Vosk model not loaded yet')
+      return
+    }
+
+    if (isListening) {
+      Vosk.stop()
+      setIsListening(false)
+    } else {
+      try {
+        setIsListening(true)
+        Vosk.start()
+        Vosk.onResult((res: any) => {
+          if (res.text) {
+            setInputText((prev) => {
+              const newText = prev ? prev + ' ' + res.text : res.text
+              return newText.trim()
+            })
+          }
+        })
+        Vosk.onError((e: any) => {
+          console.error('[Chat] Vosk error', e)
+          setIsListening(false)
+        })
+      } catch (e) {
+        console.error('[Chat] Vosk start error', e)
+        setIsListening(false)
+      }
+    }
+  }
+
+  const handlePlayTTS = (text: string) => {
+    Speech.stop() // stop any ongoing speech
+    Speech.speak(text, { language: 'en-US' })
+  }
 
   // Load identity and chat history on mount. Re-runs when UUID becomes known (Fix C).
   useEffect(() => {
@@ -245,7 +300,12 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
                 isOutgoing={true}
               />
             ) : (
-              <Text style={styles.bubbleTextOut}>{item.body}</Text>
+              <View style={styles.bubbleTextRow}>
+                <Text style={styles.bubbleTextOut}>{item.body}</Text>
+                <TouchableOpacity onPress={() => handlePlayTTS(item.body)} style={styles.ttsBtn}>
+                  <Text style={styles.ttsIcon}>🔊</Text>
+                </TouchableOpacity>
+              </View>
             )}
             <View style={styles.metaRow}>
               <Text style={styles.timeOut}>{formatTime(item.created_at)}</Text>
@@ -270,7 +330,12 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
               isOutgoing={false}
             />
           ) : (
-            <Text style={styles.bubbleTextIn}>{item.body}</Text>
+            <View style={styles.bubbleTextRow}>
+              <Text style={styles.bubbleTextIn}>{item.body}</Text>
+              <TouchableOpacity onPress={() => handlePlayTTS(item.body)} style={styles.ttsBtnIn}>
+                <Text style={styles.ttsIcon}>🔊</Text>
+              </TouchableOpacity>
+            </View>
           )}
           <Text style={styles.timeIn}>{formatTime(item.created_at)}</Text>
         </View>
@@ -333,11 +398,19 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
         {/* Input bar */}
         <View style={styles.inputBar}>
           <LocationShareButton onLocationShared={handleLocationShare} />
+          
+          <TouchableOpacity
+            style={[styles.micBtn, isListening && styles.micBtnActive]}
+            onPress={toggleListening}
+          >
+            <Text style={styles.micIcon}>{isListening ? '⏹' : '🎤'}</Text>
+          </TouchableOpacity>
+
           <TextInput
             style={styles.textInput}
             value={inputText}
             onChangeText={setInputText}
-            placeholder="Type a message..."
+            placeholder={isListening ? "Listening..." : "Type a message..."}
             placeholderTextColor="rgba(0,0,0,0.35)"
             multiline
             maxLength={500}
@@ -537,6 +610,37 @@ const styles = StyleSheet.create({
   sendBtnText: {
     color: '#FFFFFF',
     fontSize: 22,
+  },
+  bubbleTextRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  ttsBtn: {
+    marginLeft: 8,
+    padding: 2,
+  },
+  ttsBtnIn: {
+    marginLeft: 8,
+    padding: 2,
+  },
+  ttsIcon: {
+    fontSize: 16,
+  },
+  micBtn: {
+    marginRight: 8,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#E0E0E0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  micBtnActive: {
+    backgroundColor: '#FF5252',
+  },
+  micIcon: {
+    fontSize: 18,
   },
 })
 
