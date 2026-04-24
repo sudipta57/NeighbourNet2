@@ -3,6 +3,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import * as Speech from 'expo-speech'
 import * as Vosk from 'react-native-vosk'
 import {
+  ActivityIndicator,
+  DeviceEventEmitter,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -65,55 +67,105 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
   const [myDeviceId, setMyDeviceId] = useState<string | null>(null)
   const [myDisplayName, setMyDisplayName] = useState('')
   const [isListening, setIsListening] = useState(false)
+  const [partialText, setPartialText] = useState('')
+  const [isModelLoading, setIsModelLoading] = useState(true)
   const voskLoaded = useRef(false)
 
   const flatListRef = useRef<FlatList<ChatMessage>>(null)
 
   // Initialize Vosk Model
   useEffect(() => {
+    setIsModelLoading(true)
     Vosk.loadModel('model-en').then(() => {
       console.log('[Chat] Vosk model loaded')
       voskLoaded.current = true
-    }).catch(e => console.log('[Chat] Vosk load error:', e))
+      setIsModelLoading(false)
+    }).catch(e => {
+      console.error('[Chat] Vosk load error:', e)
+      setIsModelLoading(false)
+    })
 
     return () => {
-      if (voskLoaded.current) {
-        Vosk.unload()
-      }
+      try { Vosk.unload() } catch (_) {}
     }
   }, [])
 
   const toggleListening = async () => {
     if (!voskLoaded.current) {
-      console.warn('Vosk model not loaded yet')
+      if (isModelLoading) {
+        console.warn('Vosk model still loading...')
+      } else {
+        console.error('Vosk model failed to load or is not available')
+      }
       return
     }
 
     if (isListening) {
-      Vosk.stop()
+      try { Vosk.stop() } catch (e) { console.error('[Chat] Vosk stop error', e) }
       setIsListening(false)
+      setPartialText('')
     } else {
       try {
+        setInputText('')
+        setPartialText('')
+        await Vosk.start()
         setIsListening(true)
-        Vosk.start()
-        Vosk.onResult((res: any) => {
-          if (res.text) {
-            setInputText((prev) => {
-              const newText = prev ? prev + ' ' + res.text : res.text
-              return newText.trim()
-            })
-          }
-        })
-        Vosk.onError((e: any) => {
-          console.error('[Chat] Vosk error', e)
-          setIsListening(false)
-        })
       } catch (e) {
         console.error('[Chat] Vosk start error', e)
         setIsListening(false)
       }
     }
   }
+
+  // Listen for Vosk speech events via DeviceEventEmitter.
+  // The patched native module emits events through RCTDeviceEventEmitter,
+  // which DeviceEventEmitter listens to directly — no NativeModules ref needed.
+  useEffect(() => {
+    const onPartial = DeviceEventEmitter.addListener('onPartialResult', (data: string) => {
+      try {
+        // data is already a plain text string from the native side
+        setPartialText(data || '')
+      } catch (_) {}
+    })
+
+    const onResult = DeviceEventEmitter.addListener('onResult', (data: string) => {
+      try {
+        if (data) {
+          setInputText((prev) => {
+            const newText = prev ? prev + ' ' + data : data
+            return newText.trim()
+          })
+        }
+      } catch (_) {}
+    })
+
+    const onFinal = DeviceEventEmitter.addListener('onFinalResult', (data: string) => {
+      try {
+        if (data) {
+          setInputText((prev) => {
+            const newText = prev ? prev + ' ' + data : data
+            return newText.trim()
+          })
+        }
+      } catch (_) {}
+    })
+
+    const onError = DeviceEventEmitter.addListener('onError', (e: any) => {
+      console.error('[Chat] Vosk recognition error', e)
+      setIsListening(false)
+      setPartialText('')
+    })
+
+    return () => {
+      onPartial.remove()
+      onResult.remove()
+      onFinal.remove()
+      onError.remove()
+    }
+  }, [])
+
+  // NOTE: We intentionally do NOT auto-send on stop.
+  // The user reviews the transcribed text and taps the send button themselves.
 
   const handlePlayTTS = (text: string) => {
     Speech.stop() // stop any ongoing speech
@@ -400,18 +452,27 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
           <LocationShareButton onLocationShared={handleLocationShare} />
           
           <TouchableOpacity
-            style={[styles.micBtn, isListening && styles.micBtnActive]}
+            style={[
+              styles.micBtn,
+              isListening && styles.micBtnActive,
+              !voskLoaded.current && styles.micBtnDisabled
+            ]}
             onPress={toggleListening}
+            disabled={isModelLoading}
           >
-            <Text style={styles.micIcon}>{isListening ? '⏹' : '🎤'}</Text>
+            {isModelLoading ? (
+              <ActivityIndicator size="small" color="#1565C0" />
+            ) : (
+              <Text style={styles.micIcon}>{isListening ? '⏹' : '🎤'}</Text>
+            )}
           </TouchableOpacity>
 
           <TextInput
             style={styles.textInput}
             value={inputText}
             onChangeText={setInputText}
-            placeholder={isListening ? "Listening..." : "Type a message..."}
-            placeholderTextColor="rgba(0,0,0,0.35)"
+            placeholder={isListening ? (partialText || "Listening...") : "Type a message..."}
+            placeholderTextColor={isListening ? "#1565C0" : "rgba(0,0,0,0.35)"}
             multiline
             maxLength={500}
           />
@@ -635,6 +696,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#E0E0E0',
     alignItems: 'center',
     justifyContent: 'center',
+    opacity: 1,
+  },
+  micBtnDisabled: {
+    opacity: 0.5,
   },
   micBtnActive: {
     backgroundColor: '#FF5252',
