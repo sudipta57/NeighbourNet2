@@ -1,7 +1,7 @@
 import 'react-native-get-random-values'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import * as Speech from 'expo-speech'
-import Vosk from 'react-native-vosk'
+import * as Vosk from 'react-native-vosk'
 import {
   FlatList,
   KeyboardAvoidingView,
