@@ -1,6 +1,10 @@
 import 'react-native-get-random-values'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+import * as Speech from 'expo-speech'
+import * as Vosk from 'react-native-vosk'
 import {
+  ActivityIndicator,
+  DeviceEventEmitter,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -62,8 +66,111 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
   const [inputText, setInputText] = useState('')
   const [myDeviceId, setMyDeviceId] = useState<string | null>(null)
   const [myDisplayName, setMyDisplayName] = useState('')
+  const [isListening, setIsListening] = useState(false)
+  const [partialText, setPartialText] = useState('')
+  const [isModelLoading, setIsModelLoading] = useState(true)
+  const voskLoaded = useRef(false)
 
   const flatListRef = useRef<FlatList<ChatMessage>>(null)
+
+  // Initialize Vosk Model
+  useEffect(() => {
+    setIsModelLoading(true)
+    Vosk.loadModel('model-en').then(() => {
+      console.log('[Chat] Vosk model loaded')
+      voskLoaded.current = true
+      setIsModelLoading(false)
+    }).catch(e => {
+      console.error('[Chat] Vosk load error:', e)
+      setIsModelLoading(false)
+    })
+
+    return () => {
+      try { Vosk.unload() } catch (_) {}
+    }
+  }, [])
+
+  const toggleListening = async () => {
+    if (!voskLoaded.current) {
+      if (isModelLoading) {
+        console.warn('Vosk model still loading...')
+      } else {
+        console.error('Vosk model failed to load or is not available')
+      }
+      return
+    }
+
+    if (isListening) {
+      try { Vosk.stop() } catch (e) { console.error('[Chat] Vosk stop error', e) }
+      setIsListening(false)
+      setPartialText('')
+    } else {
+      try {
+        setInputText('')
+        setPartialText('')
+        await Vosk.start()
+        setIsListening(true)
+      } catch (e) {
+        console.error('[Chat] Vosk start error', e)
+        setIsListening(false)
+      }
+    }
+  }
+
+  // Listen for Vosk speech events via DeviceEventEmitter.
+  // The patched native module emits events through RCTDeviceEventEmitter,
+  // which DeviceEventEmitter listens to directly — no NativeModules ref needed.
+  useEffect(() => {
+    const onPartial = DeviceEventEmitter.addListener('onPartialResult', (data: string) => {
+      try {
+        // data is already a plain text string from the native side
+        setPartialText(data || '')
+      } catch (_) {}
+    })
+
+    const onResult = DeviceEventEmitter.addListener('onResult', (data: string) => {
+      try {
+        if (data) {
+          setInputText((prev) => {
+            const newText = prev ? prev + ' ' + data : data
+            return newText.trim()
+          })
+        }
+      } catch (_) {}
+    })
+
+    const onFinal = DeviceEventEmitter.addListener('onFinalResult', (data: string) => {
+      try {
+        if (data) {
+          setInputText((prev) => {
+            const newText = prev ? prev + ' ' + data : data
+            return newText.trim()
+          })
+        }
+      } catch (_) {}
+    })
+
+    const onError = DeviceEventEmitter.addListener('onError', (e: any) => {
+      console.error('[Chat] Vosk recognition error', e)
+      setIsListening(false)
+      setPartialText('')
+    })
+
+    return () => {
+      onPartial.remove()
+      onResult.remove()
+      onFinal.remove()
+      onError.remove()
+    }
+  }, [])
+
+  // NOTE: We intentionally do NOT auto-send on stop.
+  // The user reviews the transcribed text and taps the send button themselves.
+
+  const handlePlayTTS = (text: string) => {
+    Speech.stop() // stop any ongoing speech
+    Speech.speak(text, { language: 'en-US' })
+  }
 
   // Load identity and chat history on mount. Re-runs when UUID becomes known (Fix C).
   useEffect(() => {
@@ -245,7 +352,12 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
                 isOutgoing={true}
               />
             ) : (
-              <Text style={styles.bubbleTextOut}>{item.body}</Text>
+              <View style={styles.bubbleTextRow}>
+                <Text style={styles.bubbleTextOut}>{item.body}</Text>
+                <TouchableOpacity onPress={() => handlePlayTTS(item.body)} style={styles.ttsBtn}>
+                  <Text style={styles.ttsIcon}>🔊</Text>
+                </TouchableOpacity>
+              </View>
             )}
             <View style={styles.metaRow}>
               <Text style={styles.timeOut}>{formatTime(item.created_at)}</Text>
@@ -270,7 +382,12 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
               isOutgoing={false}
             />
           ) : (
-            <Text style={styles.bubbleTextIn}>{item.body}</Text>
+            <View style={styles.bubbleTextRow}>
+              <Text style={styles.bubbleTextIn}>{item.body}</Text>
+              <TouchableOpacity onPress={() => handlePlayTTS(item.body)} style={styles.ttsBtnIn}>
+                <Text style={styles.ttsIcon}>🔊</Text>
+              </TouchableOpacity>
+            </View>
           )}
           <Text style={styles.timeIn}>{formatTime(item.created_at)}</Text>
         </View>
@@ -333,12 +450,29 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
         {/* Input bar */}
         <View style={styles.inputBar}>
           <LocationShareButton onLocationShared={handleLocationShare} />
+          
+          <TouchableOpacity
+            style={[
+              styles.micBtn,
+              isListening && styles.micBtnActive,
+              !voskLoaded.current && styles.micBtnDisabled
+            ]}
+            onPress={toggleListening}
+            disabled={isModelLoading}
+          >
+            {isModelLoading ? (
+              <ActivityIndicator size="small" color="#1565C0" />
+            ) : (
+              <Text style={styles.micIcon}>{isListening ? '⏹' : '🎤'}</Text>
+            )}
+          </TouchableOpacity>
+
           <TextInput
             style={styles.textInput}
             value={inputText}
             onChangeText={setInputText}
-            placeholder="Type a message..."
-            placeholderTextColor="rgba(0,0,0,0.35)"
+            placeholder={isListening ? (partialText || "Listening...") : "Type a message..."}
+            placeholderTextColor={isListening ? "#1565C0" : "rgba(0,0,0,0.35)"}
             multiline
             maxLength={500}
           />
@@ -537,6 +671,41 @@ const styles = StyleSheet.create({
   sendBtnText: {
     color: '#FFFFFF',
     fontSize: 22,
+  },
+  bubbleTextRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  ttsBtn: {
+    marginLeft: 8,
+    padding: 2,
+  },
+  ttsBtnIn: {
+    marginLeft: 8,
+    padding: 2,
+  },
+  ttsIcon: {
+    fontSize: 16,
+  },
+  micBtn: {
+    marginRight: 8,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#E0E0E0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 1,
+  },
+  micBtnDisabled: {
+    opacity: 0.5,
+  },
+  micBtnActive: {
+    backgroundColor: '#FF5252',
+  },
+  micIcon: {
+    fontSize: 18,
   },
 })
 
