@@ -7,6 +7,7 @@ import {
   DeviceEventEmitter,
   FlatList,
   KeyboardAvoidingView,
+  PermissionsAndroid,
   Platform,
   StyleSheet,
   Text,
@@ -90,6 +91,26 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
     }
   }, [])
 
+  const requestAudioPermission = async () => {
+    if (Platform.OS !== 'android') return true
+    try {
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+        {
+          title: 'Microphone Permission',
+          message: 'NeighbourNet needs access to your microphone to convert speech to text.',
+          buttonNeutral: 'Ask Me Later',
+          buttonNegative: 'Cancel',
+          buttonPositive: 'OK',
+        }
+      )
+      return granted === PermissionsAndroid.RESULTS.GRANTED
+    } catch (err) {
+      console.warn(err)
+      return false
+    }
+  }
+
   const toggleListening = async () => {
     if (!voskLoaded.current) {
       if (isModelLoading) {
@@ -105,6 +126,12 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
       setIsListening(false)
       setPartialText('')
     } else {
+      const hasPermission = await requestAudioPermission()
+      if (!hasPermission) {
+        console.warn('[Chat] Microphone permission denied')
+        return
+      }
+
       try {
         setInputText('')
         setPartialText('')
