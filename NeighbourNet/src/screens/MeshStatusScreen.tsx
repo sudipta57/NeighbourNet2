@@ -194,13 +194,14 @@ const MeshStatusScreen = ({ navigation }: MeshStatusScreenProps) => {
     return 'NW'
   }
 
-  const VISUAL_NODE_POSITIONS = [
-    { top: -50, right: -20 },
-    { bottom: -30, left: -10 },
-    { top: 20, left: -70 },
-    { top: -20, left: 100 },
-    { bottom: -10, right: -60 },
-  ]
+  const getPeerAngle = (peerId: string) => {
+    let hash = 0
+    for (let i = 0; i < peerId.length; i++) {
+      hash = peerId.charCodeAt(i) + ((hash << 5) - hash)
+    }
+    return Math.abs(hash) % 360
+  }
+
 
   const VISUAL_NODE_COLORS = [
     '#182A6A', // Dark Blue
@@ -293,24 +294,45 @@ const MeshStatusScreen = ({ navigation }: MeshStatusScreenProps) => {
                   </View>
 
                   {/* Dynamic Connected Nodes */}
-                  {visualNodes.map((peer, index) => {
-                    const pos = VISUAL_NODE_POSITIONS[index]
-                    const color = VISUAL_NODE_COLORS[index]
-                    const peerId = peer.id || (peer as any).endpointId || `node-${index}`
-                    const peerName = peerId.slice(-6).toUpperCase()
-                    const rssiText = peer.rssi ? `${Math.max(-100, Math.min(-40, peer.rssi))}dB` : 'MESH'
+                  <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ rotate: compassRingRotate }] }]}>
+                    {visualNodes.map((peer, index) => {
+                      const color = VISUAL_NODE_COLORS[index]
+                      const peerId = peer.id || (peer as any).endpointId || `node-${index}`
+                      const peerName = peerId.slice(-6).toUpperCase()
+                      const rssiText = peer.rssi ? `${Math.max(-100, Math.min(-40, peer.rssi))}dB` : 'MESH'
 
-                    return (
-                      <View key={peerId} style={[styles.node, pos]}>
-                        <View style={[styles.dynamicDot, { backgroundColor: color }]} />
-                        <Text style={[styles.dynamicNodeText, { color }]}>{peerName}</Text>
-                        <Text style={[styles.dynamicNodeRssi, { color }]}>{rssiText}</Text>
-                        <View style={styles.nodeIcon}>
-                          <MaterialCommunityIcons name="signal" size={12} color={color} />
+                      const baseAngle = getPeerAngle(peerId)
+                      let distance = 45
+                      if (peer.rssi) {
+                        const clampedRssi = Math.max(-100, Math.min(-40, peer.rssi))
+                        const ratio = (clampedRssi + 40) / -60
+                        distance = 25 + (ratio * 30)
+                      }
+
+                      return (
+                        <View key={peerId} style={{ position: 'absolute', top: '50%', left: '50%' }}>
+                          <Animated.View style={[styles.node, {
+                            width: 60,
+                            marginLeft: -30,
+                            marginTop: -30,
+                            transform: [
+                              { rotate: `${baseAngle}deg` },
+                              { translateY: -distance },
+                              { rotate: `-${baseAngle}deg` },
+                              { rotate: compassCounterRotate }
+                            ]
+                          }]}>
+                            <View style={[styles.dynamicDot, { backgroundColor: color }]} />
+                            <Text style={[styles.dynamicNodeText, { color }]}>{peerName}</Text>
+                            <Text style={[styles.dynamicNodeRssi, { color }]}>{rssiText}</Text>
+                            <View style={styles.nodeIcon}>
+                              <MaterialCommunityIcons name="signal" size={12} color={color} />
+                            </View>
+                          </Animated.View>
                         </View>
-                      </View>
-                    )
-                  })}
+                      )
+                    })}
+                  </Animated.View>
                 </View>
               </View>
             </View>
