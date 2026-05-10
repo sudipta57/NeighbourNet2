@@ -35,7 +35,7 @@ const isAlreadyDiscoveringError = (error: unknown): boolean => {
   return message.includes('STATUS_ALREADY_DISCOVERING')
 }
 
-const MESH_CALL_TIMEOUT_MS = 8000
+const MESH_CALL_TIMEOUT_MS = 20000
 
 const withTimeout = async <T>(label: string, operation: Promise<T>, timeoutMs = MESH_CALL_TIMEOUT_MS): Promise<T> => {
   return Promise.race([

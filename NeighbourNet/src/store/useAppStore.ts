@@ -113,6 +113,8 @@ const useAppStore = create<AppState>()((set, get) => ({
 			if (!get().isMeshActive) {
 				await startMesh()
 				set({ isMeshActive: true })
+				// startMesh already starts discovery/scanning, so we can just refresh the count
+				return await get().refreshPeerCount()
 			}
 
 			const count = await scanNearbyPeers()
@@ -231,12 +233,18 @@ const useAppStore = create<AppState>()((set, get) => ({
 	setActiveChatFriend: (friend) => set({ activeChatFriend: friend }),
 
 	addChatMessage: (friend_uuid, msg) =>
-		set((state) => ({
-			chatMessages: {
-				...state.chatMessages,
-				[friend_uuid]: [...(state.chatMessages[friend_uuid] ?? []), msg],
-			},
-		})),
+		set((state) => {
+			const existing = state.chatMessages[friend_uuid] ?? []
+			if (existing.some((m) => m.id === msg.id)) {
+				return state
+			}
+			return {
+				chatMessages: {
+					...state.chatMessages,
+					[friend_uuid]: [...existing, msg],
+				},
+			}
+		}),
 
 	markChatMessageDelivered: (friend_uuid, message_id) =>
 		set((state) => ({
