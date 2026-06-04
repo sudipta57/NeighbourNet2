@@ -1,5 +1,6 @@
 package com.anonymous.NeighbourNet
 
+import android.content.Intent
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
@@ -123,11 +124,21 @@ class NearbyModule(reactContext: ReactApplicationContext) : ReactContextBaseJava
 
   // CHANGE 2: Extract rebroadcast as a private function.
   private fun rebroadcastToAll(messageJson: String, excludeEndpointId: String) {
-    if (ttl <= 0) return
+    val relayJson = try {
+      val obj = org.json.JSONObject(messageJson)
+      val msgTtl = obj.optInt("ttl", 0)
+      if (msgTtl <= 0) return
+      obj.put("ttl", msgTtl - 1)
+      obj.put("hop_count", obj.optInt("hop_count", 0) + 1)
+      obj.toString()
+    } catch (e: Exception) {
+      Log.w("NearbyMesh", "NearbyMesh: failed to update TTL/hop_count, dropping message")
+      return
+    }
     connectedEndpoints
       .filter { it != excludeEndpointId }
       .forEach { endpointId ->
-        val payload = Payload.fromBytes(messageJson.toByteArray(Charsets.UTF_8))
+        val payload = Payload.fromBytes(relayJson.toByteArray(Charsets.UTF_8))
         Nearby.getConnectionsClient(reactApplicationContext)
           .sendPayload(endpointId, payload)
       }
@@ -289,6 +300,9 @@ class NearbyModule(reactContext: ReactApplicationContext) : ReactContextBaseJava
       return
     }
 
+    val serviceIntent = Intent(reactApplicationContext, MeshForegroundService::class.java)
+    reactApplicationContext.startForegroundService(serviceIntent)
+
     connectionsClient.stopAllEndpoints()
     startAdvertisingThenDiscovery(promise)
   }
@@ -309,6 +323,9 @@ class NearbyModule(reactContext: ReactApplicationContext) : ReactContextBaseJava
 
   @ReactMethod
   fun stopMesh(promise: Promise) {
+    val serviceIntent = Intent(reactApplicationContext, MeshForegroundService::class.java)
+    reactApplicationContext.stopService(serviceIntent)
+
     connectionsClient.stopDiscovery()
     connectionsClient.stopAdvertising()
     connectionsClient.stopAllEndpoints()
