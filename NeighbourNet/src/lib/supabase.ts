@@ -12,9 +12,9 @@ type SupabaseResponse = {
 }
 
 const SUPABASE_URL =
-  process.env.EXPO_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? "https://npwdgcjukdwxffubkmeo.supabase.co"
+  process.env.EXPO_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? "https://jxeijuwqthtintnckhsx.supabase.co"
 const SUPABASE_ANON_KEY =
-  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY ?? "sb_publishable_3qPrMUDHPEm1mCJeg8La-w_A0XjjVQc"
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY ?? "sb_publishable_9P9PBQrysskGVdxzyVPyKw_99HCZK8O"
 
 const buildError = (message: string): SupabaseResponse => ({
   data: null,

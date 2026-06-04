@@ -6,13 +6,15 @@ import useMeshStore from '../store/meshStore'
 type MeshRole = 'gateway' | 'relay' | 'offline'
 type ConnType = 'bluetooth' | 'wifi_direct' | 'both'
 
-const TELEMETRY_INTERVAL_MS = 5000
+const TELEMETRY_INTERVAL_MS = 30_000
 const RELAYED_RESET_INTERVAL_MS = 60000
+const MAX_CONSECUTIVE_FAILURES = 3
 
 let telemetryIntervalId: ReturnType<typeof setInterval> | null = null
 let relayResetIntervalId: ReturnType<typeof setInterval> | null = null
 let netInfoUnsubscribe: NetInfoSubscription | null = null
 let latestNetState: NetInfoState | null = null
+let consecutiveFailures = 0
 
 const isOnlineState = (state: NetInfoState | null): boolean => {
   return state?.isConnected === true && state?.isInternetReachable === true
@@ -55,6 +57,10 @@ const stopTelemetryInterval = (): void => {
 }
 
 const pushTelemetry = async (): Promise<void> => {
+  if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+    return
+  }
+
   try {
     const deviceId = await getDeviceId()
     const { myMascot, currentPeers, relayedCount } = useMeshStore.getState()
@@ -80,8 +86,16 @@ const pushTelemetry = async (): Promise<void> => {
     if (error) {
       throw new Error(error.message)
     }
+
+    consecutiveFailures = 0
   } catch (error) {
-    console.warn('[TelemetryReporter] pushTelemetry failed', error)
+    consecutiveFailures += 1
+    if (consecutiveFailures === 1) {
+      console.warn('[TelemetryReporter] pushTelemetry failed', error)
+    } else if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+      console.warn('[TelemetryReporter] pushTelemetry: pausing after repeated failures', error)
+      stopTelemetryInterval()
+    }
   }
 }
 

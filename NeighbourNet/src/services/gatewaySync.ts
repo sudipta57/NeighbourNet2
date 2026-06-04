@@ -66,13 +66,20 @@ const delay = (ms: number): Promise<void> =>
 		setTimeout(resolve, ms);
 	});
 
-const FETCH_TIMEOUT_MS = 10_000;
+const FETCH_TIMEOUT_MS = 30_000;
 
 const fetchWithTimeout = async (url: string, options: RequestInit): Promise<Response> => {
 	const controller = new AbortController();
 	const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 	try {
 		return await fetch(url, { ...options, signal: controller.signal });
+	} catch (error) {
+		// React Native on Android throws "Network request failed" when AbortController fires
+		// instead of AbortError — normalise it here so callers get a clear timeout message.
+		if (controller.signal.aborted) {
+			throw new Error(`Request timed out after ${FETCH_TIMEOUT_MS / 1000}s`);
+		}
+		throw error;
 	} finally {
 		clearTimeout(timeoutId);
 	}
@@ -164,6 +171,7 @@ const postChunk = async (messages: Message[]): Promise<string[]> => {
 	} satisfies BatchPayload);
 
 	let lastError: unknown = null;
+	let lastSyncError: SyncRequestError | null = null;
 
 	for (const baseUrl of buildApiBaseCandidates()) {
 		try {
@@ -171,7 +179,6 @@ const postChunk = async (messages: Message[]): Promise<string[]> => {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
-					'ngrok-skip-browser-warning': 'true',
 				},
 				body: payload,
 			});
@@ -192,18 +199,16 @@ const postChunk = async (messages: Message[]): Promise<string[]> => {
 			}
 			return parsePersistedIds(json);
 		} catch (error) {
+			if (error instanceof SyncRequestError) {
+				lastSyncError = error;
+			}
 			lastError = error;
-			// Always try remaining fallback URLs even on non-retryable errors,
-			// because a 4xx from the primary URL (e.g. expired ngrok tunnel)
-			// does not mean fallback servers will also reject the request.
 		}
 	}
 
-	if (lastError) {
-		throw lastError;
-	}
-
-	throw new Error('Sync failed: no API base URL candidates available');
+	// Prefer SyncRequestError (has real HTTP status/body from the server) over a
+	// generic network error that may come from unreachable fallback addresses.
+	throw lastSyncError ?? lastError ?? new Error('Sync failed: no API base URL candidates available');
 };
 
 const syncChunkWithRetry = async (messages: Message[]): Promise<string[]> => {
@@ -259,12 +264,22 @@ const syncUnsyncedMessages = async (): Promise<void> => {
 					continue;
 				}
 
+				if (error instanceof SyncRequestError) {
+					console.error(`[GatewaySync] Server rejected sync HTTP ${error.status}:`, error.responseBody || error.message);
+					if (!error.retryable) continue;
+				}
+
 				const message = error instanceof Error ? error.message : String(error);
+				if (message.toLowerCase().includes('timed out')) {
+					console.error('[GatewaySync] Request timed out — server may be slow to respond');
+					console.error('[GatewaySync] Current API_BASE_URL:', API_BASE_URL);
+					throw new Error(`Sync timed out: ${message}`);
+				}
 				if (message.toLowerCase().includes('network request failed')) {
-					console.error('[GatewaySync] NETWORK BLOCKED — check API_BASE_URL and cleartext config');
+					console.error('[GatewaySync] Network error — check device internet connectivity');
 					console.error('[GatewaySync] Current API_BASE_URL:', API_BASE_URL);
 					console.error('[GatewaySync] Error:', message);
-					throw new Error(`Network blocked: ${message}`);
+					throw new Error(`Network error: ${message}`);
 				}
 
 				console.error('[GatewaySync] Chunk sync failed:', error);
