@@ -56,6 +56,15 @@ async function playNext() {
     })
 
     await sound.unloadAsync()
+    // IMPORTANT: Reset audio session to neutral so the next recording
+    // can properly acquire the microphone. Without this, Android's audio
+    // focus stays in speaker-playback mode and Recording.createAsync fails.
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      playsInSilentModeIOS: false,
+      shouldDuckAndroid: false,
+      playThroughEarpieceAndroid: false,
+    })
   } catch (e) {
     console.error('[AudioPlayer] playback error:', e)
   }

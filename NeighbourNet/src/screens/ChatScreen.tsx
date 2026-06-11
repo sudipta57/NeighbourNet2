@@ -190,11 +190,15 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
   }, [myDeviceId, friend?.device_uuid, friend?.friend_code])
 
   // PTT received
+  // NOTE: No recipient/sender ID filtering here. Kotlin uses ANDROID_ID for
+  // sender_id/recipient_id, while JS uses expo-secure-store UUIDs — they never
+  // match. Kotlin emits onPttAudioReceived on every node that receives the
+  // binary payload (including relays). The addChatMessage call below is already
+  // idempotent (deduplicates by message id), so duplicate events are safe.
   useEffect(() => {
-    if (!myDeviceId || !friend) return
+    if (!friend) return
     const storeKey = friend.device_uuid || friend.friend_code
     const unsub = onPttAudioReceived(async (data) => {
-      if (data.recipient_id !== myDeviceId && data.recipient_id !== 'broadcast') return
       const threadKey = `thread_${friend.friend_code}`
       let threadId = await AsyncStorage.getItem(threadKey)
       if (!threadId) {
@@ -220,7 +224,7 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
       enqueuePttAudio(data.local_uri, friend.display_name, data.duration_ms)
     })
     return () => unsub()
-  }, [myDeviceId, friend?.device_uuid, friend?.friend_code, friend?.display_name])
+  }, [friend?.device_uuid, friend?.friend_code, friend?.display_name])
 
   // Vosk speech events
   useEffect(() => {
@@ -376,26 +380,42 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
 
   // ── PTT ──────────────────────────────────────────────────────────────────
 
+  // Stores the result when the 5-sec auto-stop timer fires before onPressOut.
+  const autoStoppedResultRef = useRef<{ uri: string; durationMs: number } | null>(null)
+
   const handlePttPressIn = useCallback(async () => {
     if (!myDeviceId || !friend) return
     if (pttState !== 'idle') return
 
+    autoStoppedResultRef.current = null
     setPttState('recording')
     setPttDuration(0)
-    const started = await startRecording((ms) => setPttDuration(ms))
+    const started = await startRecording(
+      (ms) => setPttDuration(ms),
+      // onAutoStop: called when the 5-sec cap fires inside audioRecorder
+      (result) => { autoStoppedResultRef.current = result },
+    )
     if (!started) {
       setPttState('idle')
     }
   }, [myDeviceId, friend, pttState])
 
   const handlePttPressOut = useCallback(async () => {
-    if (!isPttRecording()) {
+    // If the 5-sec auto-stop already fired, use its result rather than
+    // calling stopRecording() again (which would return null).
+    let result: { uri: string; durationMs: number } | null = null
+    if (autoStoppedResultRef.current) {
+      result = autoStoppedResultRef.current
+      autoStoppedResultRef.current = null
+    } else if (isPttRecording()) {
+      setPttState('encoding')
+      result = await stopRecording()
+    } else {
+      // Not recording and no auto-stopped result — nothing to send.
       setPttState('idle')
       return
     }
 
-    setPttState('encoding')
-    const result = await stopRecording()
     if (!result || !myDeviceId || !friend) {
       setPttState('idle')
       return

@@ -56,15 +56,21 @@ export async function requestAudioPermission(): Promise<boolean> {
 
 export async function startRecording(
   onDuration?: (ms: number) => void,
+  onAutoStop?: (result: { uri: string; durationMs: number }) => void,
 ): Promise<boolean> {
   if (activeRecording) return false
 
   const hasPermission = await requestAudioPermission()
   if (!hasPermission) return false
 
+  // Explicitly configure the audio session for recording.
+  // On Android, allowsRecordingIOS is ignored — we must also set
+  // shouldDuckAndroid so Android properly hands audio focus to the mic.
   await Audio.setAudioModeAsync({
     allowsRecordingIOS: true,
     playsInSilentModeIOS: true,
+    shouldDuckAndroid: true,
+    playThroughEarpieceAndroid: false,
   })
 
   const { recording } = await Audio.Recording.createAsync(RECORDING_OPTIONS)
@@ -77,8 +83,11 @@ export async function startRecording(
     onDurationUpdate?.(durationMs)
   }, 100)
 
-  autoStopTimer = setTimeout(() => {
-    stopRecording().catch(console.error)
+  autoStopTimer = setTimeout(async () => {
+    const result = await stopRecording().catch(() => null)
+    if (result) {
+      onAutoStop?.(result)
+    }
   }, MAX_DURATION_MS)
 
   return true
@@ -97,7 +106,12 @@ export async function stopRecording(): Promise<{ uri: string; durationMs: number
   onDurationUpdate = null
 
   await recording.stopAndUnloadAsync()
-  await Audio.setAudioModeAsync({ allowsRecordingIOS: false })
+  await Audio.setAudioModeAsync({
+    allowsRecordingIOS: false,
+    playsInSilentModeIOS: false,
+    shouldDuckAndroid: false,
+    playThroughEarpieceAndroid: false,
+  })
 
   const uri = recording.getURI()
   if (!uri) return null
