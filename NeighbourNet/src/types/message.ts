@@ -16,7 +16,7 @@ export interface Message {
   synced: boolean;
   destination_id?: string;
   chat_thread_id?: string;
-  message_type: 'sos' | 'chat' | 'location_beacon' | 'gps_share';
+  message_type: 'sos' | 'chat' | 'location_beacon' | 'gps_share' | 'image' | 'ptt_audio';
   sender_name?: string;
   shared_lat?: number;
   shared_lng?: number;
@@ -44,6 +44,10 @@ export interface ChatMessage {
   shared_lat?: number;
   shared_lng?: number;
   shared_location_label?: string;
+  media_type?: 'image' | 'ptt_audio' | null;
+  media_uri?: string | null;
+  media_size?: number | null;
+  transfer_mode?: 'direct' | 'mesh' | null;
 }
 
 export const SOS_TEMPLATES = [

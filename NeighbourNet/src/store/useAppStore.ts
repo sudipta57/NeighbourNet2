@@ -14,6 +14,14 @@ import { startMesh } from '../services/meshService'
 
 type GatewayStatus = 'idle' | 'syncing' | 'success' | 'error'
 
+export type ImageTransferStatus = 'compressing' | 'sending' | 'sent' | 'failed'
+export interface ImageTransferState {
+  status: ImageTransferStatus
+  progress: number
+}
+
+export type PttState = 'idle' | 'recording' | 'encoding' | 'sending'
+
 export interface FriendLocation {
 	senderId: string
 	displayName: string
@@ -44,6 +52,10 @@ interface AppState {
 	activeChatFriend: Friend | null
 	chatMessages: Record<string, ChatMessage[]>
 
+	imageTransfers: Record<string, ImageTransferState>
+	pttState: PttState
+	pttDuration: number
+
 	setMeshActive: (active: boolean) => void
 	setPeerCount: (count: number) => void
 	refreshPeerCount: () => Promise<number>
@@ -73,6 +85,11 @@ interface AppState {
 	addChatMessage: (friend_uuid: string, msg: ChatMessage) => void
 	markChatMessageDelivered: (friend_uuid: string, message_id: string) => void
 	loadFriendsFromDB: () => void
+
+	setImageTransfer: (image_id: string, state: ImageTransferState) => void
+	clearImageTransfer: (image_id: string) => void
+	setPttState: (state: PttState) => void
+	setPttDuration: (ms: number) => void
 }
 
 const useAppStore = create<AppState>()((set, get) => ({
@@ -92,6 +109,10 @@ const useAppStore = create<AppState>()((set, get) => ({
 	activeChatFriend: null,
 	chatMessages: {},
 	friendLocations: [],
+
+	imageTransfers: {},
+	pttState: 'idle',
+	pttDuration: 0,
 
 	setMeshActive: (active) => set({ isMeshActive: active }),
 
@@ -264,6 +285,22 @@ const useAppStore = create<AppState>()((set, get) => ({
 			console.error('Failed to load friends from DB:', error)
 		}
 	},
+
+	setImageTransfer: (image_id, state) =>
+		set((s) => ({
+			imageTransfers: { ...s.imageTransfers, [image_id]: state },
+		})),
+
+	clearImageTransfer: (image_id) =>
+		set((s) => {
+			const next = { ...s.imageTransfers }
+			delete next[image_id]
+			return { imageTransfers: next }
+		}),
+
+	setPttState: (state) => set({ pttState: state }),
+
+	setPttDuration: (ms) => set({ pttDuration: ms }),
 }))
 
 export default useAppStore

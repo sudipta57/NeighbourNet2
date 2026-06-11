@@ -2,7 +2,7 @@
 
 # dependencies
 node_modules/
-
+android/gradle.properties
 # package manager caches
 .npm/
 .pnpm-store/

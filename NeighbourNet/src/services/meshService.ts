@@ -17,6 +17,35 @@ export interface LocationBeaconPayload {
 
 export type MeshInboundMessage = Message | LocationBeaconPayload
 
+export interface ImageSendResult {
+  image_id: string
+  transfer_mode: 'direct' | 'mesh'
+  peer_count: number
+}
+
+export interface ImageReceivedPayload {
+  type: 'image_received'
+  image_id: string
+  sender_id: string
+  recipient_id: string
+  local_uri: string
+  transfer_mode: 'direct' | 'mesh'
+}
+
+export interface PttSendResult {
+  audio_id: string
+  peer_count: number
+}
+
+export interface PttReceivedPayload {
+  type: 'ptt_received'
+  audio_id: string
+  sender_id: string
+  recipient_id: string
+  local_uri: string
+  duration_ms: number
+}
+
 const NearbyMesh = (NativeModules as {
   NearbyMesh?: NativeModule & {
     startMesh: () => Promise<void>
@@ -24,6 +53,8 @@ const NearbyMesh = (NativeModules as {
     stopMesh: () => Promise<void>
     sendMessage: (messageJson: string) => Promise<number>
     getConnectedPeerCount: () => Promise<number>
+    sendImage: (recipientId: string, highQualityPath: string, lowQualityPath: string) => Promise<ImageSendResult>
+    sendPttAudio: (recipientId: string, audioPath: string, durationMs: number) => Promise<PttSendResult>
   }
 }).NearbyMesh ?? null
 
@@ -210,6 +241,62 @@ export function onMessageDelivered(
     } catch (error) {
       console.error('Failed handling onMessageDelivered event', error)
     }
+  })
+  return () => sub.remove()
+}
+
+export async function sendImage(
+  recipientId: string,
+  highQualityPath: string,
+  lowQualityPath: string,
+): Promise<ImageSendResult> {
+  if (!NearbyMesh) {
+    console.warn('[NearbyMesh] module not available for sendImage')
+    return { image_id: '', transfer_mode: 'mesh', peer_count: 0 }
+  }
+  try {
+    const result = await NearbyMesh.sendImage(recipientId, highQualityPath, lowQualityPath)
+    useMeshStore.getState().incrementRelayed()
+    return result
+  } catch (e) {
+    console.error('[NearbyMesh] sendImage error:', e)
+    throw e
+  }
+}
+
+export async function sendPttAudio(
+  recipientId: string,
+  audioPath: string,
+  durationMs: number,
+): Promise<PttSendResult> {
+  if (!NearbyMesh) {
+    console.warn('[NearbyMesh] module not available for sendPttAudio')
+    return { audio_id: '', peer_count: 0 }
+  }
+  try {
+    const result = await NearbyMesh.sendPttAudio(recipientId, audioPath, durationMs)
+    useMeshStore.getState().incrementRelayed()
+    return result
+  } catch (e) {
+    console.error('[NearbyMesh] sendPttAudio error:', e)
+    throw e
+  }
+}
+
+export function onImageReceived(callback: (data: ImageReceivedPayload) => void): () => void {
+  if (!NearbyMesh) return () => {}
+  const emitter = new NativeEventEmitter(NearbyMesh)
+  const sub = emitter.addListener('onImageReceived', (data: ImageReceivedPayload) => {
+    callback(data)
+  })
+  return () => sub.remove()
+}
+
+export function onPttAudioReceived(callback: (data: PttReceivedPayload) => void): () => void {
+  if (!NearbyMesh) return () => {}
+  const emitter = new NativeEventEmitter(NearbyMesh)
+  const sub = emitter.addListener('onPttAudioReceived', (data: PttReceivedPayload) => {
+    callback(data)
   })
   return () => sub.remove()
 }

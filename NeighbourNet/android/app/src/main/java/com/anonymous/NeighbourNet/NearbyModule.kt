@@ -1,6 +1,9 @@
 package com.anonymous.NeighbourNet
 
+import android.content.Intent
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import com.facebook.react.bridge.Arguments
@@ -25,18 +28,25 @@ import com.google.android.gms.nearby.connection.Payload
 import com.google.android.gms.nearby.connection.PayloadCallback
 import com.google.android.gms.nearby.connection.PayloadTransferUpdate
 import com.google.android.gms.nearby.connection.Strategy
+import java.io.File
+import java.io.FileOutputStream
 import java.nio.charset.Charset
 import java.util.Collections
+import java.util.UUID
 
 class NearbyModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
   companion object {
     private const val MAX_SEEN_IDS = 500
     private const val DEFAULT_TTL = 3
+    private const val BYTE_IMAGE: Byte = 0x01
+    private const val BYTE_PTT: Byte = 0x02
   }
 
   private val connectionsClient: ConnectionsClient = Nearby.getConnectionsClient(reactContext)
   private val connectedEndpoints = Collections.synchronizedSet(mutableSetOf<String>())
+  // Maps Nearby endpoint ID → JS device UUID (populated as messages arrive)
+  private val endpointToDeviceId = Collections.synchronizedMap(mutableMapOf<String, String>())
   private val endpointName = buildEndpointName(reactContext)
   private val serviceId = reactContext.packageName
   private val strategy = Strategy.P2P_CLUSTER
@@ -61,58 +71,12 @@ class NearbyModule(reactContext: ReactApplicationContext) : ReactContextBaseJava
   private val payloadCallback = object : PayloadCallback() {
     override fun onPayloadReceived(endpointId: String, payload: Payload) {
       val bytes = payload.asBytes() ?: return
-      val messageJson = String(bytes, Charset.forName("UTF-8"))
-      val sourceEndpointId = endpointId
+      if (bytes.isEmpty()) return
 
-      // CHANGE 4: Handle ack messages before dedup flow.
-      val msgType = try {
-        org.json.JSONObject(messageJson).optString("message_type", "sos")
-      } catch (e: Exception) { "sos" }
-
-      if (msgType == "ack") {
-        val ackDest = try {
-          org.json.JSONObject(messageJson).optString("destination_id", "")
-        } catch (e: Exception) { "" }
-
-        if (ackDest == deviceId) {
-          sendEventToJS("onMessageDelivered", messageJson)
-        } else {
-          rebroadcastToAll(messageJson, sourceEndpointId)
-        }
-        return  // acks don't go through normal dedup flow
-      }
-
-      // Dedup: drop messages we have already seen.
-      val messageId = try {
-        org.json.JSONObject(messageJson).optString("message_id", "")
-      } catch (e: Exception) { "" }
-
-      if (messageId.isNotEmpty() && !seenMessageIds.add(messageId)) {
-        Log.d("NearbyMesh", "NearbyMesh: duplicate message $messageId, dropping")
-        return
-      }
-
-      Log.d("NearbyMesh", "NearbyMesh: message received from $sourceEndpointId")
-
-      // CHANGE 1: Route based on destination_id.
-      val destinationId: String? = try {
-        val obj = org.json.JSONObject(messageJson)
-        if (obj.has("destination_id") && !obj.isNull("destination_id"))
-          obj.getString("destination_id")
-        else null
-      } catch (e: Exception) { null }
-
-      // Always emit to JS — JS layer checks destination_id against its own UUID.
-      // The native deviceId (Android ID) differs from the JS-generated UUID so we
-      // cannot do destination filtering here; JS handles it correctly.
-      sendEventToJS("onMessageReceived", messageJson)
-
-      if (destinationId == null) {
-        // BROADCAST — relay to all other peers.
-        rebroadcastToAll(messageJson, sourceEndpointId)
-      } else {
-        // DIRECTED — relay toward destination so multi-hop delivery works.
-        rebroadcastToAll(messageJson, sourceEndpointId)
+      when {
+        bytes[0] == BYTE_IMAGE -> handleBinaryPayload(bytes, endpointId, "image")
+        bytes[0] == BYTE_PTT   -> handleBinaryPayload(bytes, endpointId, "ptt_audio")
+        else                   -> handleTextPayload(bytes, endpointId)
       }
     }
 
@@ -121,19 +85,167 @@ class NearbyModule(reactContext: ReactApplicationContext) : ReactContextBaseJava
     }
   }
 
-  // CHANGE 2: Extract rebroadcast as a private function.
+  // ── Text message handling (unchanged from v1.0) ──────────────────────────
+
+  private fun handleTextPayload(bytes: ByteArray, sourceEndpointId: String) {
+    val messageJson = String(bytes, Charset.forName("UTF-8"))
+
+    // Track endpoint → device UUID mapping
+    try {
+      val sid = org.json.JSONObject(messageJson).optString("sender_id", "")
+      if (sid.isNotEmpty()) endpointToDeviceId[sourceEndpointId] = sid
+    } catch (_: Exception) {}
+
+    val msgType = try {
+      org.json.JSONObject(messageJson).optString("message_type", "sos")
+    } catch (e: Exception) { "sos" }
+
+    if (msgType == "ack") {
+      val ackDest = try {
+        org.json.JSONObject(messageJson).optString("destination_id", "")
+      } catch (e: Exception) { "" }
+      if (ackDest == deviceId) {
+        sendEventToJS("onMessageDelivered", messageJson)
+      } else {
+        rebroadcastToAll(messageJson, sourceEndpointId)
+      }
+      return
+    }
+
+    val messageId = try {
+      org.json.JSONObject(messageJson).optString("message_id", "")
+    } catch (e: Exception) { "" }
+
+    if (messageId.isNotEmpty() && !seenMessageIds.add(messageId)) {
+      Log.d("NearbyMesh", "NearbyMesh: duplicate message $messageId, dropping")
+      return
+    }
+
+    Log.d("NearbyMesh", "NearbyMesh: text message received from $sourceEndpointId")
+    sendEventToJS("onMessageReceived", messageJson)
+    rebroadcastToAll(messageJson, sourceEndpointId)
+  }
+
+  // ── Binary payload handling (image + PTT) ────────────────────────────────
+
+  private fun handleBinaryPayload(bytes: ByteArray, sourceEndpointId: String, payloadKind: String) {
+    if (bytes.size < 3) return
+
+    val metaLen = ((bytes[1].toInt() and 0xFF) shl 8) or (bytes[2].toInt() and 0xFF)
+    if (bytes.size < 3 + metaLen) return
+
+    val metaBytes = bytes.copyOfRange(3, 3 + metaLen)
+    val dataBytes = bytes.copyOfRange(3 + metaLen, bytes.size)
+
+    val meta = try {
+      org.json.JSONObject(String(metaBytes, Charsets.UTF_8))
+    } catch (e: Exception) {
+      Log.w("NearbyMesh", "NearbyMesh: failed to parse binary metadata")
+      return
+    }
+
+    val mediaId = meta.optString(if (payloadKind == "image") "image_id" else "audio_id", "")
+    if (mediaId.isEmpty()) return
+
+    // Dedup
+    if (!seenMessageIds.add(mediaId)) {
+      Log.d("NearbyMesh", "NearbyMesh: duplicate $payloadKind $mediaId, dropping")
+      return
+    }
+
+    // Save to cache and emit to JS
+    saveBinaryAndEmit(dataBytes, meta, payloadKind)
+
+    // Relay if TTL > 0
+    val currentTtl = meta.optInt("ttl", 0)
+    if (currentTtl > 0) {
+      rebroadcastBinaryToAll(bytes[0], meta, dataBytes, sourceEndpointId)
+    }
+  }
+
+  private fun saveBinaryAndEmit(dataBytes: ByteArray, meta: org.json.JSONObject, payloadKind: String) {
+    try {
+      val cacheDir = reactApplicationContext.cacheDir
+      val isImage = payloadKind == "image"
+      val mediaId = meta.optString(if (isImage) "image_id" else "audio_id", UUID.randomUUID().toString())
+      val ext = if (isImage) "jpg" else "m4a"
+      val outFile = File(cacheDir, "recv_${payloadKind}_$mediaId.$ext")
+      FileOutputStream(outFile).use { it.write(dataBytes) }
+
+      val eventParams = Arguments.createMap().apply {
+        putString("type", if (isImage) "image_received" else "ptt_received")
+        putString(if (isImage) "image_id" else "audio_id", mediaId)
+        putString("sender_id", meta.optString("sender_id", ""))
+        putString("recipient_id", meta.optString("recipient_id", ""))
+        putString("local_uri", "file://${outFile.absolutePath}")
+        putString("transfer_mode", meta.optString("transfer_mode", "mesh"))
+        if (!isImage) putInt("duration_ms", meta.optInt("duration_ms", 0))
+      }
+
+      val eventName = if (isImage) "onImageReceived" else "onPttAudioReceived"
+      emitEvent(eventName, eventParams)
+      Log.d("NearbyMesh", "NearbyMesh: $payloadKind saved → ${outFile.name}")
+    } catch (e: Exception) {
+      Log.e("NearbyMesh", "NearbyMesh: failed to save $payloadKind: ${e.message}")
+    }
+  }
+
+  private fun rebroadcastBinaryToAll(
+    typeByte: Byte,
+    meta: org.json.JSONObject,
+    dataBytes: ByteArray,
+    excludeEndpointId: String,
+  ) {
+    try {
+      val updatedMeta = org.json.JSONObject(meta.toString())
+      val newTtl = updatedMeta.optInt("ttl", 0) - 1
+      if (newTtl < 0) return
+      updatedMeta.put("ttl", newTtl)
+      updatedMeta.put("hop_count", updatedMeta.optInt("hop_count", 0) + 1)
+
+      val newMetaBytes = updatedMeta.toString().toByteArray(Charsets.UTF_8)
+      val newMetaLen = newMetaBytes.size
+      val fullPayload = ByteArray(3 + newMetaLen + dataBytes.size)
+      fullPayload[0] = typeByte
+      fullPayload[1] = (newMetaLen shr 8).toByte()
+      fullPayload[2] = (newMetaLen and 0xFF).toByte()
+      System.arraycopy(newMetaBytes, 0, fullPayload, 3, newMetaLen)
+      System.arraycopy(dataBytes, 0, fullPayload, 3 + newMetaLen, dataBytes.size)
+
+      val payload = Payload.fromBytes(fullPayload)
+      connectedEndpoints
+        .filter { it != excludeEndpointId }
+        .forEach { endpointId ->
+          Nearby.getConnectionsClient(reactApplicationContext).sendPayload(endpointId, payload)
+        }
+    } catch (e: Exception) {
+      Log.e("NearbyMesh", "NearbyMesh: binary relay failed: ${e.message}")
+    }
+  }
+
+  // ── Text relay (unchanged) ───────────────────────────────────────────────
+
   private fun rebroadcastToAll(messageJson: String, excludeEndpointId: String) {
-    if (ttl <= 0) return
+    val relayJson = try {
+      val obj = org.json.JSONObject(messageJson)
+      val msgTtl = obj.optInt("ttl", 0)
+      if (msgTtl <= 0) return
+      obj.put("ttl", msgTtl - 1)
+      obj.put("hop_count", obj.optInt("hop_count", 0) + 1)
+      obj.toString()
+    } catch (e: Exception) {
+      Log.w("NearbyMesh", "NearbyMesh: failed to update TTL/hop_count, dropping message")
+      return
+    }
     connectedEndpoints
       .filter { it != excludeEndpointId }
       .forEach { endpointId ->
-        val payload = Payload.fromBytes(messageJson.toByteArray(Charsets.UTF_8))
+        val payload = Payload.fromBytes(relayJson.toByteArray(Charsets.UTF_8))
         Nearby.getConnectionsClient(reactApplicationContext)
           .sendPayload(endpointId, payload)
       }
   }
 
-  // CHANGE 3: Send delivery acknowledgement back toward original sender.
   private fun sendAcknowledgement(originalJson: String, toEndpointId: String) {
     try {
       val obj = org.json.JSONObject(originalJson)
@@ -150,7 +262,157 @@ class NearbyModule(reactContext: ReactApplicationContext) : ReactContextBaseJava
     }
   }
 
-  // CHANGE 5: Unified JS event emitter — wraps messageJson in { message: ... }.
+  // ── New: sendImage ───────────────────────────────────────────────────────
+
+  @ReactMethod
+  fun sendImage(
+    recipientId: String,
+    highQualityPath: String,
+    lowQualityPath: String,
+    promise: Promise,
+  ) {
+    try {
+      val imageId = UUID.randomUUID().toString()
+
+      // Check if recipient is directly connected
+      val recipientEndpoint = endpointToDeviceId.entries.find { it.value == recipientId }?.key
+      val isDirectlyConnected = recipientEndpoint != null &&
+        synchronized(connectedEndpoints) { connectedEndpoints.contains(recipientEndpoint) }
+
+      val (filePath, transferMode, imageTtl) = if (isDirectlyConnected) {
+        Triple(highQualityPath.removePrefix("file://"), "direct", 0)
+      } else {
+        Triple(lowQualityPath.removePrefix("file://"), "mesh", 2)
+      }
+
+      val imageFile = File(filePath)
+      if (!imageFile.exists()) {
+        promise.reject("FILE_NOT_FOUND", "Image file not found: $filePath")
+        return
+      }
+      val imageBytes = imageFile.readBytes()
+
+      val meta = org.json.JSONObject().apply {
+        put("image_id", imageId)
+        put("sender_id", deviceId)
+        put("recipient_id", recipientId)
+        put("transfer_mode", transferMode)
+        put("file_size", imageBytes.size)
+        put("ttl", imageTtl)
+        put("hop_count", 0)
+        put("timestamp", System.currentTimeMillis())
+      }
+
+      val fullPayload = buildBinaryPayload(BYTE_IMAGE, meta, imageBytes)
+
+      // Mark as seen so we don't loop on our own send
+      seenMessageIds.add(imageId)
+
+      val endpointIds = if (isDirectlyConnected && recipientEndpoint != null) {
+        listOf(recipientEndpoint)
+      } else {
+        synchronized(connectedEndpoints) { connectedEndpoints.toList() }
+      }
+
+      if (endpointIds.isEmpty()) {
+        promise.reject("NO_PEERS", "No connected peers to send image")
+        return
+      }
+
+      val payload = Payload.fromBytes(fullPayload)
+      endpointIds.forEach { endpointId ->
+        Nearby.getConnectionsClient(reactApplicationContext).sendPayload(endpointId, payload)
+      }
+
+      Log.d("NearbyMesh", "NearbyMesh: image sent via $transferMode to ${endpointIds.size} endpoint(s)")
+
+      val result = Arguments.createMap().apply {
+        putString("image_id", imageId)
+        putString("transfer_mode", transferMode)
+        putInt("peer_count", endpointIds.size)
+      }
+      promise.resolve(result)
+    } catch (e: Exception) {
+      Log.e("NearbyMesh", "NearbyMesh: sendImage error: ${e.message}")
+      promise.reject("SEND_IMAGE_ERROR", e.message)
+    }
+  }
+
+  // ── New: sendPttAudio ────────────────────────────────────────────────────
+
+  @ReactMethod
+  fun sendPttAudio(
+    recipientId: String,
+    audioPath: String,
+    durationMs: Int,
+    promise: Promise,
+  ) {
+    try {
+      val audioId = UUID.randomUUID().toString()
+      val cleanPath = audioPath.removePrefix("file://")
+      val audioFile = File(cleanPath)
+      if (!audioFile.exists()) {
+        promise.reject("FILE_NOT_FOUND", "Audio file not found: $cleanPath")
+        return
+      }
+      val audioBytes = audioFile.readBytes()
+
+      val meta = org.json.JSONObject().apply {
+        put("audio_id", audioId)
+        put("sender_id", deviceId)
+        put("recipient_id", recipientId)
+        put("duration_ms", durationMs)
+        put("ttl", 3)
+        put("hop_count", 0)
+        put("timestamp", System.currentTimeMillis())
+      }
+
+      val fullPayload = buildBinaryPayload(BYTE_PTT, meta, audioBytes)
+
+      seenMessageIds.add(audioId)
+
+      val endpointIds = synchronized(connectedEndpoints) { connectedEndpoints.toList() }
+      if (endpointIds.isEmpty()) {
+        promise.reject("NO_PEERS", "No connected peers for PTT")
+        return
+      }
+
+      val payload = Payload.fromBytes(fullPayload)
+      endpointIds.forEach { endpointId ->
+        Nearby.getConnectionsClient(reactApplicationContext).sendPayload(endpointId, payload)
+      }
+
+      Log.d("NearbyMesh", "NearbyMesh: PTT sent (${audioBytes.size} bytes) to ${endpointIds.size} peer(s)")
+
+      val result = Arguments.createMap().apply {
+        putString("audio_id", audioId)
+        putInt("peer_count", endpointIds.size)
+      }
+      promise.resolve(result)
+    } catch (e: Exception) {
+      Log.e("NearbyMesh", "NearbyMesh: sendPttAudio error: ${e.message}")
+      promise.reject("SEND_PTT_ERROR", e.message)
+    }
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+
+  private fun buildBinaryPayload(
+    typeByte: Byte,
+    meta: org.json.JSONObject,
+    dataBytes: ByteArray,
+  ): ByteArray {
+    val metaBytes = meta.toString().toByteArray(Charsets.UTF_8)
+    val metaLen = metaBytes.size
+    val result = ByteArray(3 + metaLen + dataBytes.size)
+    result[0] = typeByte
+    result[1] = (metaLen shr 8).toByte()
+    result[2] = (metaLen and 0xFF).toByte()
+    System.arraycopy(metaBytes, 0, result, 3, metaLen)
+    System.arraycopy(dataBytes, 0, result, 3 + metaLen, dataBytes.size)
+    return result
+  }
+
   private fun sendEventToJS(eventName: String, messageJson: String) {
     emitEvent(
       eventName,
@@ -159,6 +421,8 @@ class NearbyModule(reactContext: ReactApplicationContext) : ReactContextBaseJava
       }
     )
   }
+
+  // ── Connection lifecycle ─────────────────────────────────────────────────
 
   private val connectionLifecycleCallback = object : ConnectionLifecycleCallback() {
     override fun onConnectionInitiated(endpointId: String, connectionInfo: ConnectionInfo) {
@@ -184,6 +448,7 @@ class NearbyModule(reactContext: ReactApplicationContext) : ReactContextBaseJava
         connectedEndpoints.remove(endpointId)
         connectedEndpoints.size
       }
+      endpointToDeviceId.remove(endpointId)
       Log.i("NearbyMesh", "NearbyMesh: peer disconnected — total peers: $peerCount")
       emitPeerEvent("onPeerDisconnected", endpointId, peerCount)
     }
@@ -193,7 +458,6 @@ class NearbyModule(reactContext: ReactApplicationContext) : ReactContextBaseJava
     override fun onEndpointFound(endpointId: String, discoveryInfo: DiscoveredEndpointInfo) {
       Log.i("NearbyMesh", "NearbyMesh: endpoint found: $endpointId")
 
-      // Prevent both devices from racing requestConnection at once.
       val remoteEndpointName = discoveryInfo.endpointName
       val shouldInitiate = endpointName <= remoteEndpointName
       if (!shouldInitiate) {
@@ -289,6 +553,9 @@ class NearbyModule(reactContext: ReactApplicationContext) : ReactContextBaseJava
       return
     }
 
+    val serviceIntent = Intent(reactApplicationContext, MeshForegroundService::class.java)
+    reactApplicationContext.startForegroundService(serviceIntent)
+
     connectionsClient.stopAllEndpoints()
     startAdvertisingThenDiscovery(promise)
   }
@@ -309,12 +576,16 @@ class NearbyModule(reactContext: ReactApplicationContext) : ReactContextBaseJava
 
   @ReactMethod
   fun stopMesh(promise: Promise) {
+    val serviceIntent = Intent(reactApplicationContext, MeshForegroundService::class.java)
+    reactApplicationContext.stopService(serviceIntent)
+
     connectionsClient.stopDiscovery()
     connectionsClient.stopAdvertising()
     connectionsClient.stopAllEndpoints()
     synchronized(connectedEndpoints) {
       connectedEndpoints.clear()
     }
+    endpointToDeviceId.clear()
     meshRunning = false
     Log.i("NearbyMesh", "NearbyMesh: mesh stopped")
     promise.resolve(null)
