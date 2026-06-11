@@ -4,6 +4,7 @@ import * as Speech from 'expo-speech'
 import * as Vosk from 'react-native-vosk'
 import * as ImagePicker from 'expo-image-picker'
 import * as Audio from 'expo-av'
+import { Ionicons } from '@expo/vector-icons'
 import {
   ActivityIndicator,
   Alert,
@@ -632,7 +633,7 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
               </TouchableOpacity>
             ) : isPtt ? (
               <View style={styles.pttBubble}>
-                <Text style={styles.pttIcon}>🎙</Text>
+                <Ionicons name="mic" size={20} color="rgba(255,255,255,0.9)" />
                 <View>
                   <Text style={styles.bubbleTextOut}>{L.voiceMessage}</Text>
                   {item.media_size ? (
@@ -651,7 +652,7 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
               <View style={styles.bubbleTextRow}>
                 <Text style={styles.bubbleTextOut}>{item.body}</Text>
                 <TouchableOpacity onPress={() => handlePlayTTS(item.body)} style={styles.ttsBtn}>
-                  <Text style={styles.ttsIcon}>🔊</Text>
+                  <Ionicons name="volume-medium" size={18} color="rgba(255,255,255,0.75)" />
                 </TouchableOpacity>
               </View>
             )}
@@ -679,7 +680,7 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
               style={styles.pttBubble}
               onPress={() => item.media_uri && handleReplayPtt(item.media_uri, item.media_size ?? 0)}
             >
-              <Text style={styles.pttIcon}>▶</Text>
+              <Ionicons name="play-circle" size={36} color="#1565C0" />
               <View>
                 <Text style={styles.bubbleTextIn}>{L.voiceMessage}</Text>
                 {item.media_size ? (
@@ -699,7 +700,7 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
             <View style={styles.bubbleTextRow}>
               <Text style={styles.bubbleTextIn}>{item.body}</Text>
               <TouchableOpacity onPress={() => handlePlayTTS(item.body)} style={styles.ttsBtnIn}>
-                <Text style={styles.ttsIcon}>🔊</Text>
+                <Ionicons name="volume-medium" size={18} color="#9E9E9E" />
               </TouchableOpacity>
             </View>
           )}
@@ -727,7 +728,7 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
             style={styles.backBtn}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Text style={styles.backArrow}>←</Text>
+            <Ionicons name="chevron-back" size={28} color="#FFFFFF" />
           </TouchableOpacity>
 
           <View style={styles.headerCenter}>
@@ -751,7 +752,8 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
         {/* PTT speaking overlay */}
         {pttSpeaker && (
           <View style={styles.pttOverlay}>
-            <Text style={styles.pttOverlayText}>🔊 {pttSpeaker} is speaking...</Text>
+            <Ionicons name="volume-high" size={16} color="#81C784" style={{ marginRight: 6 }} />
+            <Text style={styles.pttOverlayText}>{pttSpeaker} is speaking...</Text>
           </View>
         )}
 
@@ -779,10 +781,9 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
 
           {/* Image button */}
           <TouchableOpacity style={styles.imageBtn} onPress={handlePickImage}>
-            <Text style={styles.imageBtnIcon}>📷</Text>
+            <Ionicons name="image-outline" size={22} color="#546E7A" />
           </TouchableOpacity>
 
-          {/* Mic / STT button */}
           <TouchableOpacity
             style={[
               styles.micBtn,
@@ -795,7 +796,11 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
             {isModelLoading ? (
               <ActivityIndicator size="small" color="#1565C0" />
             ) : (
-              <Text style={styles.micIcon}>{isListening ? '⏹' : '🎤'}</Text>
+              <Ionicons
+                name={isListening ? 'stop' : 'mic-outline'}
+                size={20}
+                color={isListening ? '#FFFFFF' : '#546E7A'}
+              />
             )}
           </TouchableOpacity>
 
@@ -827,7 +832,7 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
             disabled={!inputText.trim() || pttBusy}
             activeOpacity={0.8}
           >
-            <Text style={styles.sendBtnText}>→</Text>
+            <Ionicons name="send" size={18} color="#FFFFFF" />
           </TouchableOpacity>
 
           {/* PTT button */}
@@ -838,7 +843,11 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
             disabled={isListening}
             activeOpacity={0.8}
           >
-            <Text style={styles.pttBtnIcon}>{pttActive ? '⏺' : '📢'}</Text>
+            <Ionicons
+              name={pttActive ? 'radio-button-on' : 'mic'}
+              size={22}
+              color="#FFFFFF"
+            />
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -875,8 +884,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
   },
-  backBtn: { paddingRight: 8 },
-  backArrow: { color: '#FFFFFF', fontSize: 24, lineHeight: 28 },
+  backBtn: { paddingRight: 4 },
   headerCenter: { flex: 1, alignItems: 'center' },
   headerName: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
   headerCode: { color: 'rgba(255,255,255,0.6)', fontSize: 12, marginTop: 2 },
@@ -888,7 +896,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A237E',
     paddingHorizontal: 16,
     paddingVertical: 6,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   pttOverlayText: { color: '#81C784', fontSize: 13, fontWeight: '600' },
 
@@ -942,8 +952,7 @@ const styles = StyleSheet.create({
   imageOverlayText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600', textAlign: 'center' },
 
   // ── PTT bubble ───────────────────────────────────────────
-  pttBubble: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4, paddingHorizontal: 2 },
-  pttIcon: { fontSize: 22 },
+  pttBubble: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4, paddingHorizontal: 2 },
   pttDurationText: { color: 'rgba(255,255,255,0.7)', fontSize: 12, marginTop: 2 },
   tapToReplayText: { color: '#9E9E9E', fontSize: 11, marginTop: 2 },
 
@@ -979,31 +988,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sendBtnDisabled: { opacity: 0.35 },
-  sendBtnText: { color: '#FFFFFF', fontSize: 20 },
 
   // ── Image button ─────────────────────────────────────────
   imageBtn: {
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: '#ECEFF1',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  imageBtnIcon: { fontSize: 18 },
 
   // ── Mic button ───────────────────────────────────────────
   micBtn: {
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: '#ECEFF1',
     alignItems: 'center',
     justifyContent: 'center',
   },
   micBtnDisabled: { opacity: 0.5 },
   micBtnActive: { backgroundColor: '#FF5252' },
-  micIcon: { fontSize: 18 },
 
   // ── PTT button ───────────────────────────────────────────
   pttBtn: {
@@ -1018,14 +1024,12 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 3,
   },
-  pttBtnActive: { backgroundColor: '#FF5252', transform: [{ scale: 1.1 }] },
-  pttBtnIcon: { fontSize: 20 },
+  pttBtnActive: { backgroundColor: '#EF5350', transform: [{ scale: 1.12 }] },
 
   // ── Common ───────────────────────────────────────────────
   bubbleTextRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
-  ttsBtn: { marginLeft: 8, padding: 2 },
-  ttsBtnIn: { marginLeft: 8, padding: 2 },
-  ttsIcon: { fontSize: 16 },
+  ttsBtn: { marginLeft: 6, padding: 4 },
+  ttsBtnIn: { marginLeft: 6, padding: 4 },
 
   // ── Full-screen image ─────────────────────────────────────
   fullScreenBg: {
