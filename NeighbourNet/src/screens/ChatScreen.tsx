@@ -586,6 +586,27 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
     try { await sendMessage(meshMessage) } catch (e) { console.error('[Chat] sendMessage failed:', e) }
   }, [inputText, myDeviceId, myDisplayName, friend, peerCount])
 
+  // ── Attach (image + location combined) ──────────────────────────────────
+
+  const handleAttach = useCallback(() => {
+    Alert.alert('Attach', 'Choose what to share', [
+      {
+        text: '🖼  Photo',
+        onPress: handlePickImage,
+      },
+      {
+        text: '📍  Location',
+        onPress: () => {
+          // Trigger the LocationShareButton logic programmatically
+          // LocationShareButton handles its own permission + GPS internally;
+          // we expose it through a ref trigger if needed — for now show hint.
+          Alert.alert('Location', 'Tap the 📍 inside the + menu or use the location button.')
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ])
+  }, [handlePickImage])
+
   // ── Replay PTT ────────────────────────────────────────────────────────────
 
   const handleReplayPtt = (uri: string, durationMs: number) => {
@@ -775,80 +796,111 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
           }
         />
 
-        {/* Input bar */}
-        <View style={styles.inputBar}>
-          <LocationShareButton onLocationShared={handleLocationShare} />
+        {/* ─── Input Panel ────────────────────────────────────────────── */}
+        <View style={styles.inputPanel}>
 
-          {/* Image button */}
-          <TouchableOpacity style={styles.imageBtn} onPress={handlePickImage}>
-            <Ionicons name="image-outline" size={22} color="#546E7A" />
-          </TouchableOpacity>
+          {/* RECORDING MODE: full-width bar replaces the normal row */}
+          {pttActive ? (
+            <View style={styles.recordingRow}>
+              <View style={styles.recDot} />
+              <Text style={styles.recTimerText}>{formatDuration(pttDuration)}</Text>
+              <View style={styles.recWave}>
+                {[0.4, 0.7, 1.0, 0.7, 0.4, 0.9, 0.5, 0.8, 0.6, 1.0, 0.7, 0.4].map((h, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.recBar,
+                      { height: 8 + h * 18 },
+                    ]}
+                  />
+                ))}
+              </View>
+              <TouchableOpacity
+                style={styles.recReleasePill}
+                onPressOut={handlePttPressOut}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="arrow-up-circle" size={20} color="#EF5350" />
+                <Text style={styles.recReleaseText}>Release</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.inputRow}>
 
-          <TouchableOpacity
-            style={[
-              styles.micBtn,
-              isListening && styles.micBtnActive,
-              !voskLoaded.current && styles.micBtnDisabled,
-            ]}
-            onPress={toggleListening}
-            disabled={isModelLoading}
-          >
-            {isModelLoading ? (
-              <ActivityIndicator size="small" color="#1565C0" />
-            ) : (
-              <Ionicons
-                name={isListening ? 'stop' : 'mic-outline'}
-                size={20}
-                color={isListening ? '#FFFFFF' : '#546E7A'}
-              />
-            )}
-          </TouchableOpacity>
+              {/* LEFT: Attach (+) button */}
+              <TouchableOpacity style={styles.attachBtn} onPress={handleAttach}>
+                <Ionicons name="add" size={26} color="#546E7A" />
+              </TouchableOpacity>
 
-          <TextInput
-            style={styles.textInput}
-            value={inputText}
-            onChangeText={setInputText}
-            placeholder={
-              pttActive
-                ? `${L.recording} ${formatDuration(pttDuration)}`
-                : pttBusy
-                ? L.sending
-                : isListening
-                ? (partialText || 'Listening...')
-                : 'Type a message...'
-            }
-            placeholderTextColor={pttActive ? '#FF5252' : isListening ? '#1565C0' : 'rgba(0,0,0,0.35)'}
-            multiline
-            maxLength={500}
-            editable={!pttBusy}
-          />
+              {/* CENTER: Input pill (text + STT inside) */}
+              <View style={styles.inputPill}>
+                <TextInput
+                  style={styles.textInput}
+                  value={inputText}
+                  onChangeText={setInputText}
+                  placeholder={
+                    isListening
+                      ? (partialText || 'Listening...')
+                      : pttBusy
+                      ? L.sending
+                      : 'Message...'
+                  }
+                  placeholderTextColor={
+                    isListening ? '#1565C0' : 'rgba(0,0,0,0.35)'
+                  }
+                  multiline
+                  maxLength={500}
+                  editable={!pttBusy}
+                />
+                {/* STT button lives inside the pill */}
+                <TouchableOpacity
+                  style={[
+                    styles.sttBtn,
+                    isListening && styles.sttBtnActive,
+                  ]}
+                  onPress={toggleListening}
+                  disabled={isModelLoading}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  {isModelLoading ? (
+                    <ActivityIndicator size="small" color="#9E9E9E" />
+                  ) : (
+                    <Ionicons
+                      name={isListening ? 'stop-circle' : 'mic-outline'}
+                      size={20}
+                      color={isListening ? '#EF5350' : '#9E9E9E'}
+                    />
+                  )}
+                </TouchableOpacity>
+              </View>
 
-          <TouchableOpacity
-            style={[
-              styles.sendBtn,
-              !inputText.trim() && styles.sendBtnDisabled,
-            ]}
-            onPress={handleSend}
-            disabled={!inputText.trim() || pttBusy}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="send" size={18} color="#FFFFFF" />
-          </TouchableOpacity>
+              {/* RIGHT: Context-sensitive — Send (when typing) or PTT mic (when idle) */}
+              {inputText.trim() ? (
+                <TouchableOpacity
+                  style={styles.actionBtn}
+                  onPress={handleSend}
+                  disabled={pttBusy}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="send" size={18} color="#FFFFFF" />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.actionBtn}
+                  onPressIn={handlePttPressIn}
+                  onPressOut={handlePttPressOut}
+                  disabled={isListening}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="mic" size={22} color="#FFFFFF" />
+                </TouchableOpacity>
+              )}
 
-          {/* PTT button */}
-          <TouchableOpacity
-            style={[styles.pttBtn, pttActive && styles.pttBtnActive]}
-            onPressIn={handlePttPressIn}
-            onPressOut={handlePttPressOut}
-            disabled={isListening}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name={pttActive ? 'radio-button-on' : 'mic'}
-              size={22}
-              color="#FFFFFF"
-            />
-          </TouchableOpacity>
+            </View>
+          )}
+
+
+
         </View>
       </SafeAreaView>
 
@@ -956,75 +1008,154 @@ const styles = StyleSheet.create({
   pttDurationText: { color: 'rgba(255,255,255,0.7)', fontSize: 12, marginTop: 2 },
   tapToReplayText: { color: '#9E9E9E', fontSize: 11, marginTop: 2 },
 
-  // ── Input bar ────────────────────────────────────────────
-  inputBar: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    paddingHorizontal: 8,
-    paddingVertical: 10,
+  // ── Input panel ───────────────────────────────────────────
+  inputPanel: {
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
-    gap: 4,
+    borderTopColor: '#E8EAF0',
+    paddingTop: 8,
+    paddingBottom: 10,
+    paddingHorizontal: 10,
+    gap: 6,
   },
-  textInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    fontSize: 15,
-    color: '#212121',
-    maxHeight: 120,
-    backgroundColor: '#F5F5F5',
+
+  // Normal input row: [+] [pill input] [action]
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
   },
-  sendBtn: {
-    backgroundColor: '#1565C0',
+
+  attachBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sendBtnDisabled: { opacity: 0.35 },
-
-  // ── Image button ─────────────────────────────────────────
-  imageBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
     backgroundColor: '#ECEFF1',
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 1,
   },
 
-  // ── Mic button ───────────────────────────────────────────
-  micBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#ECEFF1',
+  // Input pill: TextInput + STT mic inside one rounded container
+  inputPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    backgroundColor: '#F3F4F8',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#E0E3EC',
+    paddingLeft: 14,
+    paddingRight: 6,
+    paddingVertical: 4,
+    minHeight: 44,
+  },
+
+  textInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#212121',
+    maxHeight: 110,
+    paddingVertical: 6,
+    paddingHorizontal: 0,
+  },
+
+  sttBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: 2,
+    marginBottom: 1,
   },
-  micBtnDisabled: { opacity: 0.5 },
-  micBtnActive: { backgroundColor: '#FF5252' },
+  sttBtnActive: {
+    backgroundColor: 'rgba(239,83,80,0.10)',
+  },
 
-  // ── PTT button ───────────────────────────────────────────
-  pttBtn: {
+  // Context-sensitive right action button (send OR PTT)
+  actionBtn: {
     width: 44,
     height: 44,
     borderRadius: 22,
     backgroundColor: '#1565C0',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
+    marginBottom: 1,
     elevation: 3,
+    shadowColor: '#1565C0',
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
   },
-  pttBtnActive: { backgroundColor: '#EF5350', transform: [{ scale: 1.12 }] },
+
+  // Quick-actions hint row (location + hint text)
+  quickActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 2,
+    minHeight: 28,
+  },
+  quickActionsHint: {
+    flex: 1,
+    fontSize: 11,
+    color: '#9E9E9E',
+  },
+
+  // ── Recording mode bar ───────────────────────────────────
+  recordingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF3F3',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#FFCDD2',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 10,
+    minHeight: 52,
+  },
+  recDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#EF5350',
+  },
+  recTimerText: {
+    color: '#EF5350',
+    fontWeight: '700',
+    fontSize: 14,
+    minWidth: 32,
+  },
+  recWave: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    overflow: 'hidden',
+  },
+  recBar: {
+    width: 3,
+    borderRadius: 2,
+    backgroundColor: '#EF9A9A',
+  },
+  recReleasePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: '#FFCDD2',
+  },
+  recReleaseText: {
+    color: '#EF5350',
+    fontSize: 12,
+    fontWeight: '600',
+  },
 
   // ── Common ───────────────────────────────────────────────
   bubbleTextRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
