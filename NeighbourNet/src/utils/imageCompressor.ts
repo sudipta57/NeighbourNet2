@@ -1,5 +1,5 @@
 import * as ImageManipulator from 'expo-image-manipulator'
-import * as FileSystem from 'expo-file-system'
+import * as FileSystem from 'expo-file-system/legacy'
 
 const HIGH_MAX_BYTES = 300 * 1024  // 300 KB
 const LOW_MAX_BYTES = 120 * 1024   // 120 KB
