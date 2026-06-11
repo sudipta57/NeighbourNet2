@@ -64,6 +64,12 @@ export function initDatabase(): void {
   try { db.runSync(`ALTER TABLE chat_messages ADD COLUMN shared_lat REAL`) } catch (_) {}
   try { db.runSync(`ALTER TABLE chat_messages ADD COLUMN shared_lng REAL`) } catch (_) {}
   try { db.runSync(`ALTER TABLE chat_messages ADD COLUMN shared_location_label TEXT`) } catch (_) {}
+
+  // v1.1 media columns
+  try { db.runSync(`ALTER TABLE chat_messages ADD COLUMN media_type TEXT DEFAULT NULL`) } catch (_) {}
+  try { db.runSync(`ALTER TABLE chat_messages ADD COLUMN media_uri TEXT DEFAULT NULL`) } catch (_) {}
+  try { db.runSync(`ALTER TABLE chat_messages ADD COLUMN media_size INTEGER DEFAULT NULL`) } catch (_) {}
+  try { db.runSync(`ALTER TABLE chat_messages ADD COLUMN transfer_mode TEXT DEFAULT NULL`) } catch (_) {}
 }
 
 export function insertMessage(message: Message): void {
@@ -291,8 +297,9 @@ export function saveChatMessage(msg: ChatMessage): void {
   db.runSync(
     `INSERT OR IGNORE INTO chat_messages
       (id, thread_id, friend_device_uuid, body, sender_id, is_outgoing, created_at, delivered,
-       shared_lat, shared_lng, shared_location_label)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       shared_lat, shared_lng, shared_location_label,
+       media_type, media_uri, media_size, transfer_mode)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       msg.id,
       msg.thread_id,
@@ -305,6 +312,10 @@ export function saveChatMessage(msg: ChatMessage): void {
       msg.shared_lat ?? null,
       msg.shared_lng ?? null,
       msg.shared_location_label ?? null,
+      msg.media_type ?? null,
+      msg.media_uri ?? null,
+      msg.media_size ?? null,
+      msg.transfer_mode ?? null,
     ]
   );
 }
@@ -325,6 +336,10 @@ export function getChatHistory(
     shared_lat: number | null;
     shared_lng: number | null;
     shared_location_label: string | null;
+    media_type: string | null;
+    media_uri: string | null;
+    media_size: number | null;
+    transfer_mode: string | null;
   }>(
     `SELECT * FROM chat_messages
       WHERE friend_device_uuid = ?
@@ -340,6 +355,10 @@ export function getChatHistory(
       shared_lat: row.shared_lat ?? undefined,
       shared_lng: row.shared_lng ?? undefined,
       shared_location_label: row.shared_location_label ?? undefined,
+      media_type: (row.media_type as ChatMessage['media_type']) ?? undefined,
+      media_uri: row.media_uri ?? undefined,
+      media_size: row.media_size ?? undefined,
+      transfer_mode: (row.transfer_mode as ChatMessage['transfer_mode']) ?? undefined,
     }))
     .reverse();
 }

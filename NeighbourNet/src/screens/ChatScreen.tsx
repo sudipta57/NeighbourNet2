@@ -2,12 +2,16 @@ import 'react-native-get-random-values'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import * as Speech from 'expo-speech'
 import * as Vosk from 'react-native-vosk'
+import * as ImagePicker from 'expo-image-picker'
+import * as Audio from 'expo-av'
 import {
   ActivityIndicator,
+  Alert,
   DeviceEventEmitter,
   FlatList,
+  Image,
   KeyboardAvoidingView,
-  PermissionsAndroid,
+  Modal,
   Platform,
   StyleSheet,
   Text,
@@ -27,12 +31,38 @@ import {
 import { getDeviceUUID } from '../services/appState'
 import { getDisplayName, getMyFriendCode } from '../services/profileService'
 import {
+  onImageReceived,
   onMessageDelivered,
+  onPttAudioReceived,
+  sendImage,
   sendMessage,
+  sendPttAudio,
 } from '../services/meshService'
 import useAppStore from '../store/useAppStore'
 import LocationShareButton from '../components/LocationShareButton'
 import LocationMapCard from '../components/LocationMapCard'
+import { compressImage } from '../utils/imageCompressor'
+import {
+  startRecording,
+  stopRecording,
+  isRecording as isPttRecording,
+} from '../utils/audioRecorder'
+import { enqueuePttAudio, setPlaybackStatusCallback } from '../utils/audioPlayer'
+
+// ── Bilingual strings ────────────────────────────────────────────────────────
+
+const L = {
+  holdToTalk: 'Hold to talk / কথা বলতে ধরে রাখুন',
+  sendingImage: 'Sending image... / ছবি পাঠানো হচ্ছে...',
+  voiceMessage: 'Voice message / ভয়েস মেসেজ',
+  image: 'Image / ছবি',
+  tapToReplay: 'Tap to replay / আবার শুনতে ট্যাপ করুন',
+  recording: 'Recording... / রেকর্ড হচ্ছে...',
+  compressing: 'Compressing... / কম্প্রেস হচ্ছে...',
+  sending: 'Sending... / পাঠানো হচ্ছে...',
+  imageFailed: 'Image failed to send. Retry?',
+  pickImage: 'Choose from Gallery / Camera',
+}
 
 interface ChatScreenProps {
   onBack: () => void
@@ -45,19 +75,29 @@ function formatTime(timestamp: number): string {
   return `${h}:${m}`
 }
 
+function formatDuration(ms: number): string {
+  const secs = Math.floor(ms / 1000)
+  return `0:${secs.toString().padStart(2, '0')}`
+}
+
 const ChatScreen = ({ onBack }: ChatScreenProps) => {
   const friend = useAppStore((state) => state.activeChatFriend)
   const peerCount = useAppStore((state) => state.peerCount)
   const allChatMessages = useAppStore((state) => state.chatMessages)
-  // Merge messages stored under UUID key and friend_code key.
-  // During UUID discovery, some messages may land under the code, some under the UUID.
+  const imageTransfers = useAppStore((state) => state.imageTransfers)
+  const pttState = useAppStore((state) => state.pttState)
+  const pttDuration = useAppStore((state) => state.pttDuration)
+  const setImageTransfer = useAppStore((state) => state.setImageTransfer)
+  const clearImageTransfer = useAppStore((state) => state.clearImageTransfer)
+  const setPttState = useAppStore((state) => state.setPttState)
+  const setPttDuration = useAppStore((state) => state.setPttDuration)
+
   const messages = React.useMemo(() => {
     if (!friend) return []
     const byUUID = friend.device_uuid ? (allChatMessages[friend.device_uuid] ?? []) : []
     const byCode = allChatMessages[friend.friend_code] ?? []
     if (byUUID.length === 0) return byCode
     if (byCode.length === 0) return byUUID
-    // Merge + dedup, preserving order
     const seen = new Set<string>()
     return [...byCode, ...byUUID]
       .filter((m) => (seen.has(m.id) ? false : (seen.add(m.id), true)))
@@ -70,136 +110,32 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
   const [isListening, setIsListening] = useState(false)
   const [partialText, setPartialText] = useState('')
   const [isModelLoading, setIsModelLoading] = useState(true)
+  const [pttSpeaker, setPttSpeaker] = useState<string | null>(null)
+  const [fullScreenImage, setFullScreenImage] = useState<string | null>(null)
   const voskLoaded = useRef(false)
-
   const flatListRef = useRef<FlatList<ChatMessage>>(null)
 
   // Initialize Vosk Model
   useEffect(() => {
     setIsModelLoading(true)
     Vosk.loadModel('model-en').then(() => {
-      console.log('[Chat] Vosk model loaded')
       voskLoaded.current = true
       setIsModelLoading(false)
-    }).catch(e => {
-      console.error('[Chat] Vosk load error:', e)
+    }).catch(() => {
       setIsModelLoading(false)
     })
-
-    return () => {
-      try { Vosk.unload() } catch (_) {}
-    }
+    return () => { try { Vosk.unload() } catch (_) {} }
   }, [])
 
-  const requestAudioPermission = async () => {
-    if (Platform.OS !== 'android') return true
-    try {
-      const granted = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-        {
-          title: 'Microphone Permission',
-          message: 'NeighbourNet needs access to your microphone to convert speech to text.',
-          buttonNeutral: 'Ask Me Later',
-          buttonNegative: 'Cancel',
-          buttonPositive: 'OK',
-        }
-      )
-      return granted === PermissionsAndroid.RESULTS.GRANTED
-    } catch (err) {
-      console.warn(err)
-      return false
-    }
-  }
-
-  const toggleListening = async () => {
-    if (!voskLoaded.current) {
-      if (isModelLoading) {
-        console.warn('Vosk model still loading...')
-      } else {
-        console.error('Vosk model failed to load or is not available')
-      }
-      return
-    }
-
-    if (isListening) {
-      try { Vosk.stop() } catch (e) { console.error('[Chat] Vosk stop error', e) }
-      setIsListening(false)
-      setPartialText('')
-    } else {
-      const hasPermission = await requestAudioPermission()
-      if (!hasPermission) {
-        console.warn('[Chat] Microphone permission denied')
-        return
-      }
-
-      try {
-        setInputText('')
-        setPartialText('')
-        await Vosk.start()
-        setIsListening(true)
-      } catch (e) {
-        console.error('[Chat] Vosk start error', e)
-        setIsListening(false)
-      }
-    }
-  }
-
-  // Listen for Vosk speech events via DeviceEventEmitter.
-  // The patched native module emits events through RCTDeviceEventEmitter,
-  // which DeviceEventEmitter listens to directly — no NativeModules ref needed.
+  // PTT playback status hook
   useEffect(() => {
-    const onPartial = DeviceEventEmitter.addListener('onPartialResult', (data: string) => {
-      try {
-        // data is already a plain text string from the native side
-        setPartialText(data || '')
-      } catch (_) {}
+    setPlaybackStatusCallback((playing, senderName) => {
+      setPttSpeaker(playing ? senderName : null)
     })
-
-    const onResult = DeviceEventEmitter.addListener('onResult', (data: string) => {
-      try {
-        if (data) {
-          setInputText((prev) => {
-            const newText = prev ? prev + ' ' + data : data
-            return newText.trim()
-          })
-        }
-      } catch (_) {}
-    })
-
-    const onFinal = DeviceEventEmitter.addListener('onFinalResult', (data: string) => {
-      try {
-        if (data) {
-          setInputText((prev) => {
-            const newText = prev ? prev + ' ' + data : data
-            return newText.trim()
-          })
-        }
-      } catch (_) {}
-    })
-
-    const onError = DeviceEventEmitter.addListener('onError', (e: any) => {
-      console.error('[Chat] Vosk recognition error', e)
-      setIsListening(false)
-      setPartialText('')
-    })
-
-    return () => {
-      onPartial.remove()
-      onResult.remove()
-      onFinal.remove()
-      onError.remove()
-    }
+    return () => setPlaybackStatusCallback(() => {})
   }, [])
 
-  // NOTE: We intentionally do NOT auto-send on stop.
-  // The user reviews the transcribed text and taps the send button themselves.
-
-  const handlePlayTTS = (text: string) => {
-    Speech.stop() // stop any ongoing speech
-    Speech.speak(text, { language: 'en-US' })
-  }
-
-  // Load identity and chat history on mount. Re-runs when UUID becomes known (Fix C).
+  // Load identity + chat history on mount
   useEffect(() => {
     if (!friend) return
     getDeviceUUID().then(setMyDeviceId)
@@ -211,7 +147,7 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
     }
   }, [friend?.device_uuid])
 
-  // Subscribe to delivery acks — mark matching outgoing messages as delivered.
+  // Delivery acks
   useEffect(() => {
     if (!friend?.device_uuid) return
     const uuid = friend.device_uuid
@@ -222,13 +158,297 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
     return () => unsub()
   }, [friend?.device_uuid])
 
-  // Auto-scroll to bottom whenever the message list grows.
+  // Image received
+  useEffect(() => {
+    if (!myDeviceId || !friend) return
+    const storeKey = friend.device_uuid || friend.friend_code
+    const unsub = onImageReceived(async (data) => {
+      if (data.recipient_id !== myDeviceId) return
+      const threadKey = `thread_${friend.friend_code}`
+      let threadId = await AsyncStorage.getItem(threadKey)
+      if (!threadId) {
+        threadId = uuidv4()
+        await AsyncStorage.setItem(threadKey, threadId)
+      }
+      const chatMsg: ChatMessage = {
+        id: data.image_id,
+        thread_id: threadId,
+        friend_device_uuid: storeKey,
+        body: L.image,
+        sender_id: data.sender_id,
+        is_outgoing: false,
+        created_at: Date.now(),
+        delivered: true,
+        media_type: 'image',
+        media_uri: data.local_uri,
+        transfer_mode: data.transfer_mode,
+      }
+      saveChatMessage(chatMsg)
+      useAppStore.getState().addChatMessage(storeKey, chatMsg)
+    })
+    return () => unsub()
+  }, [myDeviceId, friend?.device_uuid, friend?.friend_code])
+
+  // PTT received
+  useEffect(() => {
+    if (!myDeviceId || !friend) return
+    const storeKey = friend.device_uuid || friend.friend_code
+    const unsub = onPttAudioReceived(async (data) => {
+      if (data.recipient_id !== myDeviceId && data.recipient_id !== 'broadcast') return
+      const threadKey = `thread_${friend.friend_code}`
+      let threadId = await AsyncStorage.getItem(threadKey)
+      if (!threadId) {
+        threadId = uuidv4()
+        await AsyncStorage.setItem(threadKey, threadId)
+      }
+      const chatMsg: ChatMessage = {
+        id: data.audio_id,
+        thread_id: threadId,
+        friend_device_uuid: storeKey,
+        body: L.voiceMessage,
+        sender_id: data.sender_id,
+        is_outgoing: false,
+        created_at: Date.now(),
+        delivered: true,
+        media_type: 'ptt_audio',
+        media_uri: data.local_uri,
+        media_size: data.duration_ms,
+      }
+      saveChatMessage(chatMsg)
+      useAppStore.getState().addChatMessage(storeKey, chatMsg)
+      // Auto-play
+      enqueuePttAudio(data.local_uri, friend.display_name, data.duration_ms)
+    })
+    return () => unsub()
+  }, [myDeviceId, friend?.device_uuid, friend?.friend_code, friend?.display_name])
+
+  // Vosk speech events
+  useEffect(() => {
+    const onPartial = DeviceEventEmitter.addListener('onPartialResult', (data: string) => {
+      try { setPartialText(data || '') } catch (_) {}
+    })
+    const onResult = DeviceEventEmitter.addListener('onResult', (data: string) => {
+      try {
+        if (data) setInputText((prev) => (prev ? prev + ' ' + data : data).trim())
+      } catch (_) {}
+    })
+    const onFinal = DeviceEventEmitter.addListener('onFinalResult', (data: string) => {
+      try {
+        if (data) setInputText((prev) => (prev ? prev + ' ' + data : data).trim())
+      } catch (_) {}
+    })
+    const onError = DeviceEventEmitter.addListener('onError', () => {
+      setIsListening(false)
+      setPartialText('')
+    })
+    return () => { onPartial.remove(); onResult.remove(); onFinal.remove(); onError.remove() }
+  }, [])
+
+  // Auto-scroll
   useEffect(() => {
     if (messages.length === 0) return
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true })
-    }, 50)
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50)
   }, [messages.length])
+
+  const handlePlayTTS = (text: string) => {
+    Speech.stop()
+    Speech.speak(text, { language: 'en-US' })
+  }
+
+  const requestAudioPermission = async () => {
+    if (Platform.OS !== 'android') return true
+    const { PermissionsAndroid } = require('react-native')
+    const granted = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+      {
+        title: 'Microphone Permission',
+        message: 'NeighbourNet needs access to your microphone to convert speech to text.',
+        buttonNeutral: 'Ask Me Later',
+        buttonNegative: 'Cancel',
+        buttonPositive: 'OK',
+      }
+    )
+    return granted === PermissionsAndroid.RESULTS.GRANTED
+  }
+
+  const toggleListening = async () => {
+    if (!voskLoaded.current) return
+    if (isListening) {
+      try { Vosk.stop() } catch (_) {}
+      setIsListening(false)
+      setPartialText('')
+    } else {
+      const hasPermission = await requestAudioPermission()
+      if (!hasPermission) return
+      try {
+        setInputText('')
+        setPartialText('')
+        await Vosk.start()
+        setIsListening(true)
+      } catch (_) {
+        setIsListening(false)
+      }
+    }
+  }
+
+  // ── Image send ────────────────────────────────────────────────────────────
+
+  const handlePickImage = async () => {
+    if (!myDeviceId || !friend) return
+
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Gallery access is required to send images.')
+      return
+    }
+
+    Alert.alert(L.pickImage, '', [
+      {
+        text: '📷 Camera',
+        onPress: async () => {
+          const cam = await ImagePicker.requestCameraPermissionsAsync()
+          if (cam.status !== 'granted') return
+          const result = await ImagePicker.launchCameraAsync({ quality: 1 })
+          if (!result.canceled && result.assets[0]) {
+            await sendImageFromUri(result.assets[0].uri)
+          }
+        },
+      },
+      {
+        text: '🖼 Gallery',
+        onPress: async () => {
+          const result = await ImagePicker.launchImageLibraryAsync({ quality: 1, mediaTypes: ImagePicker.MediaTypeOptions.Images })
+          if (!result.canceled && result.assets[0]) {
+            await sendImageFromUri(result.assets[0].uri)
+          }
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ])
+  }
+
+  const sendImageFromUri = async (uri: string) => {
+    if (!myDeviceId || !friend) return
+    const imageId = uuidv4()
+    const storeKey = friend.device_uuid || friend.friend_code
+    const threadKey = `thread_${friend.friend_code}`
+    let threadId = await AsyncStorage.getItem(threadKey)
+    if (!threadId) {
+      threadId = uuidv4()
+      await AsyncStorage.setItem(threadKey, threadId)
+    }
+
+    // Optimistic UI: show compressing state with placeholder
+    setImageTransfer(imageId, { status: 'compressing', progress: 0 })
+    const placeholderMsg: ChatMessage = {
+      id: imageId,
+      thread_id: threadId,
+      friend_device_uuid: storeKey,
+      body: L.image,
+      sender_id: myDeviceId,
+      is_outgoing: true,
+      created_at: Date.now(),
+      delivered: false,
+      media_type: 'image',
+      media_uri: uri, // show original while compressing
+    }
+    saveChatMessage(placeholderMsg)
+    useAppStore.getState().addChatMessage(storeKey, placeholderMsg)
+
+    try {
+      setImageTransfer(imageId, { status: 'compressing', progress: 10 })
+      const { highQuality, lowQuality } = await compressImage(uri)
+
+      setImageTransfer(imageId, { status: 'sending', progress: 50 })
+      const result = await sendImage(
+        friend.device_uuid || friend.friend_code,
+        highQuality,
+        lowQuality,
+      )
+
+      setImageTransfer(imageId, { status: 'sent', progress: 100 })
+      setTimeout(() => clearImageTransfer(imageId), 3000)
+    } catch (e) {
+      console.error('[Chat] sendImage failed:', e)
+      setImageTransfer(imageId, { status: 'failed', progress: 0 })
+    }
+  }
+
+  // ── PTT ──────────────────────────────────────────────────────────────────
+
+  const handlePttPressIn = useCallback(async () => {
+    if (!myDeviceId || !friend) return
+    if (pttState !== 'idle') return
+
+    setPttState('recording')
+    setPttDuration(0)
+    const started = await startRecording((ms) => setPttDuration(ms))
+    if (!started) {
+      setPttState('idle')
+    }
+  }, [myDeviceId, friend, pttState])
+
+  const handlePttPressOut = useCallback(async () => {
+    if (!isPttRecording()) {
+      setPttState('idle')
+      return
+    }
+
+    setPttState('encoding')
+    const result = await stopRecording()
+    if (!result || !myDeviceId || !friend) {
+      setPttState('idle')
+      return
+    }
+
+    const { uri, durationMs: dur } = result
+    if (dur < 300) {
+      // Too short, ignore
+      setPttState('idle')
+      return
+    }
+
+    const audioId = uuidv4()
+    const storeKey = friend.device_uuid || friend.friend_code
+    const threadKey = `thread_${friend.friend_code}`
+    let threadId = await AsyncStorage.getItem(threadKey)
+    if (!threadId) {
+      threadId = uuidv4()
+      await AsyncStorage.setItem(threadKey, threadId)
+    }
+
+    const chatMsg: ChatMessage = {
+      id: audioId,
+      thread_id: threadId,
+      friend_device_uuid: storeKey,
+      body: L.voiceMessage,
+      sender_id: myDeviceId,
+      is_outgoing: true,
+      created_at: Date.now(),
+      delivered: false,
+      media_type: 'ptt_audio',
+      media_uri: uri,
+      media_size: dur,
+    }
+    saveChatMessage(chatMsg)
+    useAppStore.getState().addChatMessage(storeKey, chatMsg)
+
+    try {
+      setPttState('sending')
+      await sendPttAudio(
+        friend.device_uuid || friend.friend_code,
+        uri,
+        dur,
+      )
+    } catch (e) {
+      console.error('[Chat] sendPttAudio failed:', e)
+    } finally {
+      setPttState('idle')
+      setPttDuration(0)
+    }
+  }, [myDeviceId, friend, pttState])
+
+  // ── Location share ────────────────────────────────────────────────────────
 
   const handleLocationShare = useCallback(async (lat: number, lng: number, label: string) => {
     if (!myDeviceId || !friend) return
@@ -284,13 +504,10 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
       gps_lng: lng,
     }
 
-    try {
-      await sendMessage(meshMessage)
-    } catch (e) {
-      console.error('[Chat] sendMessage (location) failed:', e)
-    }
-    console.log('[Chat] Location shared:', lat, lng)
+    try { await sendMessage(meshMessage) } catch (e) { console.error('[Chat] location send failed:', e) }
   }, [myDeviceId, myDisplayName, friend])
+
+  // ── Text send ────────────────────────────────────────────────────────────
 
   const handleSend = useCallback(async () => {
     const body = inputText.trim()
@@ -298,7 +515,6 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
 
     setInputText('')
 
-    // Use friend_code-based thread key so it survives UUID being unknown initially
     const threadKey = `thread_${friend.friend_code}`
     let threadId = await AsyncStorage.getItem(threadKey)
     if (!threadId) {
@@ -309,7 +525,6 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
     const msgId = uuidv4()
     const now = Date.now()
     const nowIso = new Date(now).toISOString()
-    // Use friend_code as fallback store key when UUID not yet known
     const storeKey = friend.device_uuid || friend.friend_code
 
     const chatMsg: ChatMessage = {
@@ -332,11 +547,9 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
       body,
       sender_id: myDeviceId,
       sender_name: myDisplayName,
-      // If UUID unknown: omit destination_id so message broadcasts to all peers
       destination_id: friend.device_uuid || undefined,
       chat_thread_id: threadId,
       message_type: 'chat',
-      // Carry our friend code so the recipient can link our UUID to our code
       location_hint: myCode,
       priority_tier: 'LOW',
       priority_score: 0,
@@ -349,14 +562,17 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
       gps_lng: null,
     }
 
-    console.log('[Chat] Sending to:', friend.device_uuid || '(broadcast)', 'peers:', peerCount)
-    try {
-      const result = await sendMessage(meshMessage)
-      console.log('[Chat] sendMessage returned:', result)
-    } catch (e) {
-      console.error('[Chat] sendMessage failed:', e)
-    }
+    try { await sendMessage(meshMessage) } catch (e) { console.error('[Chat] sendMessage failed:', e) }
   }, [inputText, myDeviceId, myDisplayName, friend, peerCount])
+
+  // ── Replay PTT ────────────────────────────────────────────────────────────
+
+  const handleReplayPtt = (uri: string, durationMs: number) => {
+    if (!uri || !friend) return
+    enqueuePttAudio(uri, friend.display_name, durationMs)
+  }
+
+  // ── Message rendering ────────────────────────────────────────────────────
 
   if (!friend) return null
 
@@ -366,12 +582,45 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
 
   const renderMessage = ({ item }: { item: ChatMessage }) => {
     const isLocationShare = item.shared_lat != null && item.shared_lng != null
+    const isImage = item.media_type === 'image'
+    const isPtt = item.media_type === 'ptt_audio'
+    const transfer = item.id ? imageTransfers[item.id] : undefined
 
     if (item.is_outgoing) {
       return (
         <View style={styles.rowRight}>
-          <View style={[styles.bubbleOut, isLocationShare && styles.bubbleMap]}>
-            {isLocationShare ? (
+          <View style={[styles.bubbleOut, (isLocationShare || isImage) && styles.bubbleMedia]}>
+            {isImage && item.media_uri ? (
+              <TouchableOpacity onPress={() => setFullScreenImage(item.media_uri!)}>
+                <Image source={{ uri: item.media_uri }} style={styles.imageBubble} resizeMode="cover" />
+                {transfer && transfer.status !== 'sent' && (
+                  <View style={styles.imageOverlay}>
+                    <Text style={styles.imageOverlayText}>
+                      {transfer.status === 'compressing'
+                        ? L.compressing
+                        : transfer.status === 'sending'
+                        ? L.sending
+                        : transfer.status === 'failed'
+                        ? '✕ Failed'
+                        : ''}
+                    </Text>
+                    {transfer.status !== 'failed' && (
+                      <ActivityIndicator size="small" color="#FFFFFF" style={{ marginTop: 4 }} />
+                    )}
+                  </View>
+                )}
+              </TouchableOpacity>
+            ) : isPtt ? (
+              <View style={styles.pttBubble}>
+                <Text style={styles.pttIcon}>🎙</Text>
+                <View>
+                  <Text style={styles.bubbleTextOut}>{L.voiceMessage}</Text>
+                  {item.media_size ? (
+                    <Text style={styles.pttDurationText}>{formatDuration(item.media_size)}</Text>
+                  ) : null}
+                </View>
+              </View>
+            ) : isLocationShare ? (
               <LocationMapCard
                 latitude={item.shared_lat!}
                 longitude={item.shared_lng!}
@@ -400,8 +649,26 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
     return (
       <View style={styles.rowLeft}>
         <Text style={styles.senderName}>{friend.display_name}</Text>
-        <View style={[styles.bubbleIn, isLocationShare && styles.bubbleMap]}>
-          {isLocationShare ? (
+        <View style={[styles.bubbleIn, (isLocationShare || isImage) && styles.bubbleMedia]}>
+          {isImage && item.media_uri ? (
+            <TouchableOpacity onPress={() => setFullScreenImage(item.media_uri!)}>
+              <Image source={{ uri: item.media_uri }} style={styles.imageBubble} resizeMode="cover" />
+            </TouchableOpacity>
+          ) : isPtt ? (
+            <TouchableOpacity
+              style={styles.pttBubble}
+              onPress={() => item.media_uri && handleReplayPtt(item.media_uri, item.media_size ?? 0)}
+            >
+              <Text style={styles.pttIcon}>▶</Text>
+              <View>
+                <Text style={styles.bubbleTextIn}>{L.voiceMessage}</Text>
+                {item.media_size ? (
+                  <Text style={styles.pttDurationText}>{formatDuration(item.media_size)}</Text>
+                ) : null}
+                <Text style={styles.tapToReplayText}>{L.tapToReplay}</Text>
+              </View>
+            </TouchableOpacity>
+          ) : isLocationShare ? (
             <LocationMapCard
               latitude={item.shared_lat!}
               longitude={item.shared_lng!}
@@ -421,6 +688,11 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
       </View>
     )
   }
+
+  // ── PTT button label ──────────────────────────────────────────────────────
+
+  const pttActive = pttState === 'recording'
+  const pttBusy = pttState !== 'idle'
 
   return (
     <KeyboardAvoidingView
@@ -456,6 +728,13 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
           />
         </View>
 
+        {/* PTT speaking overlay */}
+        {pttSpeaker && (
+          <View style={styles.pttOverlay}>
+            <Text style={styles.pttOverlayText}>🔊 {pttSpeaker} is speaking...</Text>
+          </View>
+        )}
+
         {/* Message list */}
         <FlatList
           ref={flatListRef}
@@ -477,12 +756,18 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
         {/* Input bar */}
         <View style={styles.inputBar}>
           <LocationShareButton onLocationShared={handleLocationShare} />
-          
+
+          {/* Image button */}
+          <TouchableOpacity style={styles.imageBtn} onPress={handlePickImage}>
+            <Text style={styles.imageBtnIcon}>📷</Text>
+          </TouchableOpacity>
+
+          {/* Mic / STT button */}
           <TouchableOpacity
             style={[
               styles.micBtn,
               isListening && styles.micBtnActive,
-              !voskLoaded.current && styles.micBtnDisabled
+              !voskLoaded.current && styles.micBtnDisabled,
             ]}
             onPress={toggleListening}
             disabled={isModelLoading}
@@ -498,36 +783,69 @@ const ChatScreen = ({ onBack }: ChatScreenProps) => {
             style={styles.textInput}
             value={inputText}
             onChangeText={setInputText}
-            placeholder={isListening ? (partialText || "Listening...") : "Type a message..."}
-            placeholderTextColor={isListening ? "#1565C0" : "rgba(0,0,0,0.35)"}
+            placeholder={
+              pttActive
+                ? `${L.recording} ${formatDuration(pttDuration)}`
+                : pttBusy
+                ? L.sending
+                : isListening
+                ? (partialText || 'Listening...')
+                : 'Type a message...'
+            }
+            placeholderTextColor={pttActive ? '#FF5252' : isListening ? '#1565C0' : 'rgba(0,0,0,0.35)'}
             multiline
             maxLength={500}
+            editable={!pttBusy}
           />
+
           <TouchableOpacity
             style={[
               styles.sendBtn,
               !inputText.trim() && styles.sendBtnDisabled,
             ]}
             onPress={handleSend}
-            disabled={!inputText.trim()}
+            disabled={!inputText.trim() || pttBusy}
             activeOpacity={0.8}
           >
             <Text style={styles.sendBtnText}>→</Text>
           </TouchableOpacity>
+
+          {/* PTT button */}
+          <TouchableOpacity
+            style={[styles.pttBtn, pttActive && styles.pttBtnActive]}
+            onPressIn={handlePttPressIn}
+            onPressOut={handlePttPressOut}
+            disabled={isListening}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.pttBtnIcon}>{pttActive ? '⏺' : '📢'}</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
+
+      {/* Full-screen image viewer */}
+      <Modal visible={fullScreenImage !== null} transparent animationType="fade">
+        <TouchableOpacity
+          style={styles.fullScreenBg}
+          onPress={() => setFullScreenImage(null)}
+          activeOpacity={1}
+        >
+          {fullScreenImage && (
+            <Image
+              source={{ uri: fullScreenImage }}
+              style={styles.fullScreenImage}
+              resizeMode="contain"
+            />
+          )}
+        </TouchableOpacity>
+      </Modal>
     </KeyboardAvoidingView>
   )
 }
 
 const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
-  root: {
-    flex: 1,
-    backgroundColor: '#ECEFF1',
-  },
+  flex: { flex: 1 },
+  root: { flex: 1, backgroundColor: '#ECEFF1' },
 
   // ── Header ──────────────────────────────────────────────
   header: {
@@ -537,63 +855,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
   },
-  backBtn: {
-    paddingRight: 8,
-  },
-  backArrow: {
-    color: '#FFFFFF',
-    fontSize: 24,
-    lineHeight: 28,
-  },
-  headerCenter: {
-    flex: 1,
+  backBtn: { paddingRight: 8 },
+  backArrow: { color: '#FFFFFF', fontSize: 24, lineHeight: 28 },
+  headerCenter: { flex: 1, alignItems: 'center' },
+  headerName: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
+  headerCode: { color: 'rgba(255,255,255,0.6)', fontSize: 12, marginTop: 2 },
+  peerStatus: { fontSize: 11, marginTop: 2 },
+  statusDot: { width: 12, height: 12, borderRadius: 6, marginLeft: 8 },
+
+  // ── PTT overlay ──────────────────────────────────────────
+  pttOverlay: {
+    backgroundColor: '#1A237E',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
     alignItems: 'center',
   },
-  headerName: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  headerCode: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 12,
-    marginTop: 2,
-  },
-  peerStatus: {
-    fontSize: 11,
-    marginTop: 2,
-  },
-  statusDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginLeft: 8,
-  },
+  pttOverlayText: { color: '#81C784', fontSize: 13, fontWeight: '600' },
 
   // ── Message list ─────────────────────────────────────────
-  list: {
-    flex: 1,
-  },
-  listContent: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    flexGrow: 1,
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: 'center',
-    paddingTop: 60,
-  },
-  emptyText: {
-    color: '#9E9E9E',
-    fontSize: 14,
-  },
+  list: { flex: 1 },
+  listContent: { paddingVertical: 12, paddingHorizontal: 12, flexGrow: 1 },
+  emptyContainer: { flex: 1, alignItems: 'center', paddingTop: 60 },
+  emptyText: { color: '#9E9E9E', fontSize: 14 },
 
   // ── Outgoing bubble ──────────────────────────────────────
-  rowRight: {
-    alignItems: 'flex-end',
-    marginBottom: 8,
-  },
+  rowRight: { alignItems: 'flex-end', marginBottom: 8 },
   bubbleOut: {
     backgroundColor: '#1565C0',
     borderRadius: 16,
@@ -602,46 +888,17 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     maxWidth: '75%',
   },
-  bubbleMap: {
-    paddingHorizontal: 4,
-    paddingVertical: 4,
-  },
-  bubbleTextOut: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    lineHeight: 20,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-    gap: 4,
-  },
-  timeOut: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 11,
-  },
-  tick: {
-    fontSize: 11,
-  },
-  tickPending: {
-    color: 'rgba(255,255,255,0.45)',
-  },
-  tickDelivered: {
-    color: '#90CAF9',
-  },
+  bubbleMedia: { paddingHorizontal: 4, paddingVertical: 4 },
+  bubbleTextOut: { color: '#FFFFFF', fontSize: 15, lineHeight: 20 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 },
+  timeOut: { color: 'rgba(255,255,255,0.6)', fontSize: 11 },
+  tick: { fontSize: 11 },
+  tickPending: { color: 'rgba(255,255,255,0.45)' },
+  tickDelivered: { color: '#90CAF9' },
 
   // ── Incoming bubble ──────────────────────────────────────
-  rowLeft: {
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  senderName: {
-    color: '#9E9E9E',
-    fontSize: 11,
-    marginBottom: 3,
-    marginLeft: 4,
-  },
+  rowLeft: { alignItems: 'flex-start', marginBottom: 8 },
+  senderName: { color: '#9E9E9E', fontSize: 11, marginBottom: 3, marginLeft: 4 },
   bubbleIn: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
@@ -650,26 +907,36 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     maxWidth: '75%',
   },
-  bubbleTextIn: {
-    color: '#212121',
-    fontSize: 15,
-    lineHeight: 20,
+  bubbleTextIn: { color: '#212121', fontSize: 15, lineHeight: 20 },
+  timeIn: { color: '#9E9E9E', fontSize: 11, marginTop: 4 },
+
+  // ── Image bubble ─────────────────────────────────────────
+  imageBubble: { width: 220, height: 160, borderRadius: 12 },
+  imageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  timeIn: {
-    color: '#9E9E9E',
-    fontSize: 11,
-    marginTop: 4,
-  },
+  imageOverlayText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600', textAlign: 'center' },
+
+  // ── PTT bubble ───────────────────────────────────────────
+  pttBubble: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4, paddingHorizontal: 2 },
+  pttIcon: { fontSize: 22 },
+  pttDurationText: { color: 'rgba(255,255,255,0.7)', fontSize: 12, marginTop: 2 },
+  tapToReplayText: { color: '#9E9E9E', fontSize: 11, marginTop: 2 },
 
   // ── Input bar ────────────────────────────────────────────
   inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     paddingVertical: 10,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#E0E0E0',
+    gap: 4,
   },
   textInput: {
     flex: 1,
@@ -684,56 +951,70 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5',
   },
   sendBtn: {
-    marginLeft: 8,
     backgroundColor: '#1565C0',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sendBtnDisabled: {
-    opacity: 0.35,
-  },
-  sendBtnText: {
-    color: '#FFFFFF',
-    fontSize: 22,
-  },
-  bubbleTextRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-  },
-  ttsBtn: {
-    marginLeft: 8,
-    padding: 2,
-  },
-  ttsBtnIn: {
-    marginLeft: 8,
-    padding: 2,
-  },
-  ttsIcon: {
-    fontSize: 16,
-  },
-  micBtn: {
-    marginRight: 8,
+  sendBtnDisabled: { opacity: 0.35 },
+  sendBtnText: { color: '#FFFFFF', fontSize: 20 },
+
+  // ── Image button ─────────────────────────────────────────
+  imageBtn: {
     width: 38,
     height: 38,
     borderRadius: 19,
     backgroundColor: '#E0E0E0',
     alignItems: 'center',
     justifyContent: 'center',
-    opacity: 1,
   },
-  micBtnDisabled: {
-    opacity: 0.5,
+  imageBtnIcon: { fontSize: 18 },
+
+  // ── Mic button ───────────────────────────────────────────
+  micBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#E0E0E0',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  micBtnActive: {
-    backgroundColor: '#FF5252',
+  micBtnDisabled: { opacity: 0.5 },
+  micBtnActive: { backgroundColor: '#FF5252' },
+  micIcon: { fontSize: 18 },
+
+  // ── PTT button ───────────────────────────────────────────
+  pttBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#1565C0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
   },
-  micIcon: {
-    fontSize: 18,
+  pttBtnActive: { backgroundColor: '#FF5252', transform: [{ scale: 1.1 }] },
+  pttBtnIcon: { fontSize: 20 },
+
+  // ── Common ───────────────────────────────────────────────
+  bubbleTextRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
+  ttsBtn: { marginLeft: 8, padding: 2 },
+  ttsBtnIn: { marginLeft: 8, padding: 2 },
+  ttsIcon: { fontSize: 16 },
+
+  // ── Full-screen image ─────────────────────────────────────
+  fullScreenBg: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  fullScreenImage: { width: '100%', height: '100%' },
 })
 
 export default ChatScreen
